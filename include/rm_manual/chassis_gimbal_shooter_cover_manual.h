@@ -30,9 +30,12 @@ protected:
   void rightSwitchMidRise() override;
   void rightSwitchUpRise() override;
   void ePress() override;
+  void bPress() override;
   void cPress() override;
   void zPress();
   void zRelease();
+  void xPressing();
+  void xRelease() override;
   void ctrlRPressing();
   void ctrlRRelease() override;
   void wPress() override;
@@ -54,6 +57,7 @@ protected:
   double exit_buff_mode_duration_{};
   double gyro_speed_limit_{};
   double sin_gyro_base_scale_{ 1. }, sin_gyro_amplitude_{ 0. }, sin_gyro_period_{ 1. }, sin_gyro_phase_{ 0. };
+  double pass_hole_angle_{0.};
   rm_common::SwitchDetectionCaller* switch_buff_srv_{};
   rm_common::SwitchDetectionCaller* switch_buff_type_srv_{};
   rm_common::SwitchDetectionCaller* switch_exposure_srv_{};
@@ -61,6 +65,7 @@ protected:
   InputEvent ctrl_z_event_, z_event_;
   std::string supply_frame_;
   ros::Time last_switch_time_;
+  ros::Time last_send_time_;
   bool supply_ = false;
   bool cover_close_ = true;
   int count_{};

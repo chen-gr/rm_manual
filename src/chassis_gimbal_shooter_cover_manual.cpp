@@ -28,10 +28,14 @@ ChassisGimbalShooterCoverManual::ChassisGimbalShooterCoverManual(ros::NodeHandle
   sin_gyro_amplitude_ = vel_nh.param("sin_gyro_amplitude", 0.0);
   sin_gyro_period_ = vel_nh.param("sin_gyro_period", 1.0);
   sin_gyro_phase_ = vel_nh.param("sin_gyro_phase", 0.0);
+  ros::NodeHandle gimbal_nh(nh, "gimbal");
+  pass_hole_angle_ = gimbal_nh.param("pass_hole_angle", 0.0);
 
   ctrl_z_event_.setEdge(boost::bind(&ChassisGimbalShooterCoverManual::ctrlZPress, this),
                         boost::bind(&ChassisGimbalShooterCoverManual::ctrlZRelease, this));
   ctrl_r_event_.setActiveHigh(boost::bind(&ChassisGimbalShooterCoverManual::ctrlRPressing, this));
+  x_event_.setActiveHigh(boost::bind(&ChassisGimbalShooterCoverManual::xPressing, this));
+  x_event_.setFalling(boost::bind(&ChassisGimbalShooterCoverManual::xRelease, this));
   z_event_.setEdge(boost::bind(&ChassisGimbalShooterCoverManual::zPress, this),
                    boost::bind(&ChassisGimbalShooterCoverManual::zRelease, this));
 }
@@ -120,6 +124,7 @@ void ChassisGimbalShooterCoverManual::checkKeyboard(const rm_msgs::DbusData::Con
   ChassisGimbalShooterManual::checkKeyboard(dbus_data);
   ctrl_z_event_.update(dbus_data->key_ctrl & dbus_data->key_z);
   z_event_.update((!dbus_data->key_ctrl) & dbus_data->key_z);
+  x_event_.update((!dbus_data->key_ctrl) & dbus_data->key_x);
 }
 
 void ChassisGimbalShooterCoverManual::sendCommand(const ros::Time& time)
@@ -209,21 +214,19 @@ void ChassisGimbalShooterCoverManual::ePress()
   }
 }
 
+void ChassisGimbalShooterCoverManual::bPress()
+{
+  chassis_cmd_sender_->power_limit_->setStartBurstTime(ros::Time::now());
+}
+
 void ChassisGimbalShooterCoverManual::cPress()
 {
-  if (is_gyro_)
-  {
-    setChassisMode(rm_msgs::ChassisCmd::FOLLOW);
-  }
+  setChassisMode(rm_msgs::ChassisCmd::RAW);
+  chassis_cmd_sender_->power_limit_->updateState(rm_common::PowerLimit::BURST);
+  if (switch_buff_srv_->getTarget() != rm_msgs::StatusChangeRequest::ARMOR)
+    changeGyroSpeedMode(LOW);
   else
-  {
-    setChassisMode(rm_msgs::ChassisCmd::RAW);
-    chassis_cmd_sender_->power_limit_->updateState(rm_common::PowerLimit::NORMAL);
-    if (switch_buff_srv_->getTarget() != rm_msgs::StatusChangeRequest::ARMOR)
-      changeGyroSpeedMode(LOW);
-    else
-      changeGyroSpeedMode(NORMAL);
-  }
+    changeGyroSpeedMode(NORMAL);
 }
 
 void ChassisGimbalShooterCoverManual::zPress()
@@ -235,6 +238,30 @@ void ChassisGimbalShooterCoverManual::zPress()
 void ChassisGimbalShooterCoverManual::zRelease()
 {
   shooter_cmd_sender_->setShootFrequency(last_shoot_freq_);
+}
+
+void ChassisGimbalShooterCoverManual::xPressing() {
+  const ros::Time time = ros::Time::now();
+  if (time - last_send_time_ > ros::Duration(0.05)) {
+    if (track_data_.id != 0) {
+      return;
+    }
+    double roll{}, pitch{}, yaw{};
+    try {
+      quatToRPY(tf_buffer_.lookupTransform("odom", "yaw", ros::Time(0)).transform.rotation, roll, pitch, yaw);
+    } catch (tf2::TransformException &ex) {
+      ROS_WARN("%s", ex.what());
+    }
+    double traj_yaw = yaw;
+    traj_yaw += gimbal_cmd_sender_->getMsg()->rate_yaw * ros::Duration(0.05).toSec();
+    gimbal_cmd_sender_->setMode(rm_msgs::GimbalCmd::TRAJ);
+    gimbal_cmd_sender_->setGimbalTraj(traj_yaw, pass_hole_angle_);
+    last_send_time_ = time;
+  }
+}
+
+void ChassisGimbalShooterCoverManual::xRelease() {
+  gimbal_cmd_sender_->setMode(rm_msgs::GimbalCmd::RATE);
 }
 
 void ChassisGimbalShooterCoverManual::wPress()

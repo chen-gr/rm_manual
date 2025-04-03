@@ -37,7 +37,7 @@ public:
   struct Dart
   {
     double outpost_offset_, base_offset_;
-    double outpost_qd_, base_qd_;
+    double outpost_b_, base_b_;
     double trigger_position_;
   };
 protected:
@@ -60,7 +60,8 @@ protected:
   void waitAfterLaunch(const double time);
   void launchTwoDart();
   void getDartFiredNum();
-  void triggerComeBackProtect();
+  bool triggerIsWorked() const;
+  bool triggerIsHome() const;
   void gameRobotStatusCallback(const rm_msgs::GameRobotStatus::ConstPtr& data) override;
   void dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data) override;
   void dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data);
@@ -69,21 +70,28 @@ protected:
   void wheelClockwise();
   void wheelAntiClockwise();
 
-  rm_common::JointPointCommandSender *a_;
-  rm_common::JointPointCommandSender *pitch_sender_;
-  rm_common::CalibrationQueue *trigger_calibration_, *gimbal_calibration_;
-  double pitch_outpost_{}, pitch_base_{}, yaw_outpost_{}, yaw_base_{};
-  double qd_, upward_vel_;
+  rm_common::JointPointCommandSender *yaw_sender_;
+  rm_common::JointPointCommandSender *trigger_sender_;
+  rm_common::JointPointCommandSender *a_left_sender_, *a_right_sender_; //TODO : 修改名字
+  rm_common::JointPointCommandSender *b_sender_;  // TODO : 修改名字
+  rm_common::CalibrationQueue *shooter_calibration_, *gimbal_calibration_;
+
+  double b_outpost_{}, b_base_{}, yaw_outpost_{}, yaw_base_{};
+  double downward_vel_, upward_vel_;
   std::unordered_map<int, Dart> dart_list_{};
   std::unordered_map<std::string, std::vector<double>> target_position_{};
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
-  bool if_stop_{ true }, has_stopped{ false };
+  bool if_stop_{ true }, has_stopped{ false },is_reach_{false},is_calibrate_{false},trigger_has_work_{false},ready_{false};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;
 
   int dart_fired_num_ = 0, initial_dart_fired_num_ = 0;
-  double trigger_position_ = 0., pitch_velocity_ = 0., yaw_velocity_ = 0.;
+  double trigger_home_{},trigger_work_{};
+  double trigger_confirm_home_{},trigger_confirm_work_{};
+  double a_left_position_{}, a_right_position_{},trigger_position_{};
+  double a_left_max_{}, a_right_max_{},a_left_min_{}, a_right_min_{};
+
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
   ros::Subscriber dart_client_cmd_sub_;
@@ -91,12 +99,6 @@ protected:
   int outpost_hp_;
   int dart_door_open_times_ = 0, last_dart_door_status_ = 1;
   int auto_state_ = OUTPOST, manual_state_ = OUTPOST, move_state_ = NORMAL, launch_state_ = NONE;
-
-
-
-
-
-
 };
 
 }
