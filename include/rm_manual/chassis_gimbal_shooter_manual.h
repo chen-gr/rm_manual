@@ -93,7 +93,10 @@ protected:
   virtual void shiftPress();
   virtual void shiftRelease();
   void rPress();
-  void qPress();
+  virtual void qPress()
+  {
+    shooter_cmd_sender_->setShootFrequency(rm_common::HeatLimit::BURST);
+  }
   void qRelease()
   {
     shooter_cmd_sender_->setShootFrequency(rm_common::HeatLimit::LOW);

@@ -38,6 +38,7 @@ ChassisGimbalShooterCoverManual::ChassisGimbalShooterCoverManual(ros::NodeHandle
   x_event_.setFalling(boost::bind(&ChassisGimbalShooterCoverManual::xRelease, this));
   z_event_.setEdge(boost::bind(&ChassisGimbalShooterCoverManual::zPress, this),
                    boost::bind(&ChassisGimbalShooterCoverManual::zRelease, this));
+  q_event_.setActiveHigh(boost::bind(&ChassisGimbalShooterCoverManual::qPress, this));
 }
 
 void ChassisGimbalShooterCoverManual::changeSpeedMode(SpeedMode speed_mode)
@@ -227,6 +228,12 @@ void ChassisGimbalShooterCoverManual::cPress()
     changeGyroSpeedMode(LOW);
   else
     changeGyroSpeedMode(NORMAL);
+}
+
+void ChassisGimbalShooterCoverManual::qPress()
+{
+  setChassisMode(rm_msgs::ChassisCmd::FOLLOW);
+  chassis_cmd_sender_->power_limit_->updateState(rm_common::PowerLimit::NORMAL);
 }
 
 void ChassisGimbalShooterCoverManual::zPress()

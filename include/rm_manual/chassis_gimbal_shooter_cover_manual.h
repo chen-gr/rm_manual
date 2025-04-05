@@ -32,6 +32,7 @@ protected:
   void ePress() override;
   void bPress() override;
   void cPress() override;
+  void qPress() override;
   void zPress();
   void zRelease();
   void xPressing();
