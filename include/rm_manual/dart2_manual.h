@@ -10,6 +10,7 @@
 #include <rm_msgs/GameRobotStatus.h>
 #include <rm_msgs/GameStatus.h>
 #include <unordered_map>
+#include <dart_msgs/armPosition.h>
 
 namespace rm_manual
 {
@@ -38,12 +39,11 @@ public:
   {
     double outpost_offset_, base_offset_;
     double outpost_b_, base_b_;
-    double trigger_position_;
   };
 protected:
   void sendCommand(const ros::Time& time) override;
   void getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpcValue& targets,
-               const XmlRpc::XmlRpcValue& launch_id, const XmlRpc::XmlRpcValue& trigger_position);
+               const XmlRpc::XmlRpcValue& launch_id);
   void run() override;
   void checkReferee() override;
   void remoteControlTurnOn() override;
@@ -95,6 +95,7 @@ protected:
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
   ros::Subscriber dart_client_cmd_sub_;
+  ros::Publisher arm_position_pub_;
   InputEvent dart_client_cmd_event_;
   int outpost_hp_;
   int dart_door_open_times_ = 0, last_dart_door_status_ = 1;

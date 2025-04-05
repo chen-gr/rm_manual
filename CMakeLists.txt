@@ -17,6 +17,7 @@ find_package(catkin REQUIRED
         roscpp
         sensor_msgs
         rm_msgs
+        dart_msgs
         rm_common
         tf2_geometry_msgs
         serial
@@ -45,6 +46,7 @@ catkin_package(
         roscpp
         sensor_msgs
         rm_msgs
+        dart_msgs
         rm_common
         tf2_geometry_msgs
         std_msgs

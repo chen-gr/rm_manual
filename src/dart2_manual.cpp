@@ -8,6 +8,11 @@ namespace rm_manual
 {
 Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : ManualBase(nh, nh_referee)
 {
+  XmlRpc::XmlRpcValue dart_list,targets,launch_id;
+  nh.getParam("launch_id", launch_id);
+  nh.getParam("dart_list", dart_list);
+  nh.getParam("targets", targets);
+  getList(dart_list, targets, launch_id);
   ros::NodeHandle nh_yaw = ros::NodeHandle(nh, "yaw");
   yaw_sender_ = new rm_common::JointPointCommandSender(nh_yaw, joint_state_);
 
@@ -54,10 +59,11 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
       nh_referee.subscribe<rm_msgs::GameRobotHp>("game_robot_hp", 10, &Dart2Manual::gameRobotHpCallback, this);
   game_status_sub_ =
       nh_referee.subscribe<rm_msgs::GameStatus>("game_status", 10, &Dart2Manual::gameStatusCallback, this);
+  arm_position_pub_ = nh.advertise<dart_msgs::armPosition>("/arm_position",1);
 }
 
 void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpcValue& targets,
-                         const XmlRpc::XmlRpcValue& launch_id, const XmlRpc::XmlRpcValue& trigger_position)
+                         const XmlRpc::XmlRpcValue& launch_id)
 {
   for (const auto& dart : darts)
   {
@@ -73,7 +79,6 @@ void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpc
         dart_info.outpost_b_ = static_cast<double>(dart.second["param"][1]);
         dart_info.base_offset_ = static_cast<double>(dart.second["param"][2]);
         dart_info.base_b_ = static_cast<double>(dart.second["param"][3]);
-        dart_info.trigger_position_ = static_cast<double>(trigger_position[i]);
         dart_list_.insert(std::make_pair(i, dart_info));
       }
     }
@@ -169,13 +174,11 @@ void Dart2Manual::leftSwitchDownOn()
 
 bool Dart2Manual::triggerIsWorked() const
 {
-  //ROS_INFO("trigger_position:%lf, trigger_work:%lf ",trigger_position_,trigger_work_);
   return trigger_position_ <= trigger_work_;
 }
 
 bool Dart2Manual::triggerIsHome() const
 {
-  //ROS_INFO("trigger_position:%lf, trigger_home:%lf ",trigger_position_,trigger_home_);
   return trigger_position_ >= trigger_home_;
 }
 void Dart2Manual::leftSwitchMidOn()
@@ -201,8 +204,6 @@ void Dart2Manual::leftSwitchMidOn()
     a_right_sender_->setPoint(upward_vel_);
     a_left_sender_->setPoint(upward_vel_);
   }
-  // ROS_INFO("a_l_p:%lf:, a_l_mim:%lf",a_left_position_,a_left_min_);
-  // ROS_INFO("a_r_p:%lf:, a_r_mim:%lf",a_right_position_,a_right_min_);
   if (ready_ && a_left_position_<=a_left_min_ && a_right_position_<=a_right_min_)
   {
     a_left_sender_->setPoint(0.0);
