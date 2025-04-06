@@ -43,7 +43,7 @@ public:
 protected:
   void sendCommand(const ros::Time& time) override;
   void getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpcValue& targets,
-               const XmlRpc::XmlRpcValue& launch_id);
+               const XmlRpc::XmlRpcValue& launch_id,const XmlRpc::XmlRpcValue& arm_positions);
   void run() override;
   void checkReferee() override;
   void remoteControlTurnOn() override;
@@ -69,6 +69,9 @@ protected:
   void gameStatusCallback(const rm_msgs::GameStatus::ConstPtr& data) override;
   void wheelClockwise();
   void wheelAntiClockwise();
+  std::string getOrdinalName(int dart_index);
+  void setArmPosition(const std::vector<double>& joint_positions);
+  void setArmGripperPosition(double position);
 
   rm_common::JointPointCommandSender *yaw_sender_;
   rm_common::JointPointCommandSender *trigger_sender_;
@@ -80,6 +83,8 @@ protected:
   double downward_vel_, upward_vel_;
   std::unordered_map<int, Dart> dart_list_{};
   std::unordered_map<std::string, std::vector<double>> target_position_{};
+  std::unordered_map<std::string, std::vector<double>> arm_position_{};
+  dart_msgs::armPosition arm_position_msg_data_;
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
   bool if_stop_{ true }, has_stopped{ false },is_reach_{false},is_calibrate_{false},trigger_has_work_{false},ready_{false};
 
@@ -91,9 +96,12 @@ protected:
   double trigger_confirm_home_{},trigger_confirm_work_{};
   double a_left_position_{}, a_right_position_{},trigger_position_{};
   double a_left_max_{}, a_right_max_{},a_left_min_{}, a_right_min_{};
+  double arm_get_position_{},arm_put_position_{};
+  bool first_send_{},central_send_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
+  ros::Time last_send_time_;
   ros::Subscriber dart_client_cmd_sub_;
   ros::Publisher arm_position_pub_;
   InputEvent dart_client_cmd_event_;

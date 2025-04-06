@@ -8,11 +8,13 @@ namespace rm_manual
 {
 Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : ManualBase(nh, nh_referee)
 {
-  XmlRpc::XmlRpcValue dart_list,targets,launch_id;
+  XmlRpc::XmlRpcValue dart_list,targets,launch_id,arm_positions;
   nh.getParam("launch_id", launch_id);
   nh.getParam("dart_list", dart_list);
   nh.getParam("targets", targets);
-  getList(dart_list, targets, launch_id);
+  nh.getParam("arm_positions", arm_positions);
+  getList(dart_list, targets, launch_id,arm_positions);
+
   ros::NodeHandle nh_yaw = ros::NodeHandle(nh, "yaw");
   yaw_sender_ = new rm_common::JointPointCommandSender(nh_yaw, joint_state_);
 
@@ -63,7 +65,7 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
 }
 
 void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpcValue& targets,
-                         const XmlRpc::XmlRpcValue& launch_id)
+                         const XmlRpc::XmlRpcValue& launch_id,const XmlRpc::XmlRpcValue& arm_positions)
 {
   for (const auto& dart : darts)
   {
@@ -91,6 +93,18 @@ void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpc
     position[0] = static_cast<double>(target.second["position"][0]);
     position[1] = static_cast<double>(target.second["position"][1]);
     target_position_.insert(std::make_pair(target.first, position));
+  }
+  for (const auto& arm_position : arm_positions)
+  {
+    ROS_ASSERT(arm_position.second.hasMember("position"));
+    ROS_ASSERT(arm_position.second["position"].getType() == XmlRpc::XmlRpcValue::TypeArray);
+    std::vector<double> position(5);
+    position[0] = static_cast<double>(arm_position.second["position"][0]);
+    position[1] = static_cast<double>(arm_position.second["position"][1]);
+    position[2] = static_cast<double>(arm_position.second["position"][2]);
+    position[3] = static_cast<double>(arm_position.second["position"][3]);
+    position[4] = static_cast<double>(arm_position.second["position"][4]);
+    arm_position_.insert(std::make_pair(arm_position.first,position));
   }
 }
 
@@ -132,7 +146,6 @@ void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)
 
 void Dart2Manual::sendCommand(const ros::Time& time)
 {
-
   a_left_sender_->sendCommand(time);
   a_right_sender_->sendCommand(time);
   b_sender_->sendCommand(time);
@@ -143,6 +156,7 @@ void Dart2Manual::sendCommand(const ros::Time& time)
 void Dart2Manual::checkReferee()
 {
   ManualBase::checkReferee();
+  arm_position_pub_.publish(arm_position_msg_data_);
 }
 
 void Dart2Manual::move(rm_common::JointPointCommandSender* joint, double ch)
@@ -170,6 +184,9 @@ void Dart2Manual::leftSwitchDownOn()
   dart_fired_num_ = 0;
   a_left_sender_->setPoint(0.0);
   a_right_sender_->setPoint(0.0);
+  setArmPosition(arm_position_["init"]);
+  first_send_ = false;
+  central_send_ = false;
 }
 
 bool Dart2Manual::triggerIsWorked() const
@@ -188,6 +205,22 @@ void Dart2Manual::leftSwitchMidOn()
     trigger_sender_->setPoint(0.02);
     a_left_sender_->setPoint(downward_vel_);
     a_right_sender_->setPoint(downward_vel_);
+    if (!first_send_)
+    {
+      setArmPosition(arm_position_[getOrdinalName(dart_fired_num_)]);
+      first_send_ = true;
+      last_send_time_ = ros::Time::now();
+    }
+    if (ros::Time::now() - last_send_time_ > ros::Duration(0.5) && !central_send_ )
+    {
+      setArmGripperPosition(arm_get_position_);
+      last_send_time_ = ros::Time::now();
+      central_send_ = true;
+    }
+    if (ros::Time::now() - last_send_time_ > ros::Duration(0.5) && central_send_)
+    {
+      setArmPosition(arm_position_["central"]);
+    }
   }
   if (a_left_position_>= a_left_max_ && a_right_position_>= a_right_max_)
   {
@@ -201,11 +234,13 @@ void Dart2Manual::leftSwitchMidOn()
   }
   if (triggerIsHome())
   {
+    setArmGripperPosition(arm_put_position_);
     a_right_sender_->setPoint(upward_vel_);
     a_left_sender_->setPoint(upward_vel_);
   }
   if (ready_ && a_left_position_<=a_left_min_ && a_right_position_<=a_right_min_)
   {
+    setArmPosition(arm_position_["init"]);
     a_left_sender_->setPoint(0.0);
     a_right_sender_->setPoint(0.0);
   }
@@ -213,6 +248,7 @@ void Dart2Manual::leftSwitchMidOn()
 
 void Dart2Manual::leftSwitchUpOn()
 {
+  setArmPosition(arm_position_["init"]);
   switch (manual_state_)
   {
     case OUTPOST:
@@ -226,6 +262,8 @@ void Dart2Manual::leftSwitchUpOn()
   }
   trigger_sender_->setPoint(0.02);
   ready_ = false;
+  first_send_ = false;
+  central_send_ = false;
   dart_fired_num_++;
 }
 
@@ -312,6 +350,41 @@ void Dart2Manual::dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data)
   dbus_data_ = *data;
 }
 
+std::string Dart2Manual::getOrdinalName(int dart_index) {
+  switch (dart_index) {
+    case 0: return "first";
+    case 1: return "second";
+    case 2: return "third";
+    case 3: return "fourth";
+    default:
+      throw std::out_of_range("Invalid dart index: " + std::to_string(dart_index));
+  }
+}
+void Dart2Manual::setArmPosition(const std::vector<double>& joint_positions) {
+  constexpr int REQUIRED_JOINTS = 5;
+
+  if (joint_positions.size() < REQUIRED_JOINTS) {
+    throw std::invalid_argument("Invalid joint positions size: expected "
+        + std::to_string(REQUIRED_JOINTS) + ", got "
+        + std::to_string(joint_positions.size()));
+  }
+
+  std::array<double*, REQUIRED_JOINTS> joints = {
+    &arm_position_msg_data_.joint1_pos,
+    &arm_position_msg_data_.joint2_pos,
+    &arm_position_msg_data_.joint3_pos,
+    &arm_position_msg_data_.joint4_pos,
+    &arm_position_msg_data_.joint5_pos
+  };
+
+  for (size_t i = 0; i < REQUIRED_JOINTS; ++i) {
+    *joints[i] = joint_positions[i];
+  }
+}
+void Dart2Manual::setArmGripperPosition(double position)
+{
+  arm_position_msg_data_.joint5_pos=position;
+}
 void Dart2Manual::dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data)
 {
   dart_launch_opening_status_ = data->dart_launch_opening_status;
