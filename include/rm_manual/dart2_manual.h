@@ -33,7 +33,8 @@ public:
   enum LaunchMode
   {
     NONE,
-    AIMED
+    READY,
+    PUSH
   };
   struct Dart
   {
@@ -58,7 +59,7 @@ protected:
   void move(rm_common::JointPointCommandSender* joint, double ch);
   void recordPosition(const rm_msgs::DbusData dbus_data);
   void waitAfterLaunch(const double time);
-  void launchTwoDart();
+  void readyLaunchDart(int dart_fired_num);
   void getDartFiredNum();
   bool triggerIsWorked() const;
   bool triggerIsHome() const;
@@ -87,6 +88,9 @@ protected:
   dart_msgs::armPosition arm_position_msg_data_;
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
   bool if_stop_{ true }, has_stopped{ false },is_reach_{false},is_calibrate_{false},trigger_has_work_{false},ready_{false};
+  bool has_launch{false};
+  bool all_ready{false};
+  int has_fired_num_{};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;
@@ -98,9 +102,11 @@ protected:
   double a_left_max_{}, a_right_max_{},a_left_min_{}, a_right_min_{};
   double arm_get_position_{},arm_put_position_{};
   bool first_send_{},central_send_{};
+  double b_velocity_ = 0., yaw_velocity_ = 0.;
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
+  ros::Time last_launch_time_{};
   ros::Time last_send_time_;
   ros::Subscriber dart_client_cmd_sub_;
   ros::Publisher arm_position_pub_;

@@ -127,7 +127,6 @@ void Dart2Manual::remoteControlTurnOn()
   gimbal_calibration_->reset();
   shooter_calibration_->stopController();
   shooter_calibration_->reset();
-
 }
 
 void Dart2Manual::run()
@@ -177,28 +176,7 @@ void Dart2Manual::move(rm_common::JointPointCommandSender* joint, double ch)
   }
 }
 
-void Dart2Manual::leftSwitchDownOn()
-{
-  trigger_sender_->setPoint(0.7);
-  ready_ = false;
-  dart_fired_num_ = 0;
-  a_left_sender_->setPoint(0.0);
-  a_right_sender_->setPoint(0.0);
-  setArmPosition(arm_position_["init"]);
-  first_send_ = false;
-  central_send_ = false;
-}
-
-bool Dart2Manual::triggerIsWorked() const
-{
-  return trigger_position_ <= trigger_work_;
-}
-
-bool Dart2Manual::triggerIsHome() const
-{
-  return trigger_position_ >= trigger_home_;
-}
-void Dart2Manual::leftSwitchMidOn()
+void Dart2Manual::readyLaunchDart(int dart_fired_num)
 {
   if (!ready_)
   {
@@ -207,7 +185,7 @@ void Dart2Manual::leftSwitchMidOn()
     a_right_sender_->setPoint(downward_vel_);
     if (!first_send_)
     {
-      setArmPosition(arm_position_[getOrdinalName(dart_fired_num_)]);
+      setArmPosition(arm_position_[getOrdinalName(dart_fired_num)]);
       first_send_ = true;
       last_send_time_ = ros::Time::now();
     }
@@ -243,27 +221,56 @@ void Dart2Manual::leftSwitchMidOn()
     setArmPosition(arm_position_["init"]);
     a_left_sender_->setPoint(0.0);
     a_right_sender_->setPoint(0.0);
+    all_ready = true;
   }
+}
+
+void Dart2Manual::leftSwitchDownOn()
+{
+  trigger_sender_->setPoint(0.7);
+  ready_ = false;
+  dart_fired_num_ = 0;
+  a_left_sender_->setPoint(0.0);
+  a_right_sender_->setPoint(0.0);
+  setArmPosition(arm_position_["init"]);
+  first_send_ = false;
+  central_send_ = false;
+}
+
+bool Dart2Manual::triggerIsWorked() const
+{
+  return trigger_position_ <= trigger_work_;
+}
+
+bool Dart2Manual::triggerIsHome() const
+{
+  return trigger_position_ >= trigger_home_;
+}
+void Dart2Manual::leftSwitchMidOn()
+{
+  switch (manual_state_)
+  {
+    case OUTPOST:
+      yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+      b_sender_->setPoint(b_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+      break;
+    case BASE:
+      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+      b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
+    break;
+  }
+  readyLaunchDart(dart_fired_num_);
 }
 
 void Dart2Manual::leftSwitchUpOn()
 {
-  setArmPosition(arm_position_["init"]);
-  switch (manual_state_)
-  {
-    case OUTPOST:
-    yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
-    b_sender_->setPoint(b_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
-    break;
-    case BASE:
-    yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
-    b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
-    break;
-  }
   trigger_sender_->setPoint(0.02);
+
+  setArmPosition(arm_position_["init"]);
   ready_ = false;
   first_send_ = false;
   central_send_ = false;
+
   dart_fired_num_++;
 }
 
@@ -308,12 +315,94 @@ void Dart2Manual::rightSwitchDownOn()
 
 void Dart2Manual::rightSwitchUpRise()
 {
-  // TODO : 添加PC控制代码
+  ManualBase::rightSwitchUpRise();
+  yaw_sender_->setPoint(yaw_outpost_);
+  b_sender_->setPoint(b_outpost_);
 }
 
 void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
 {
   ManualBase::updatePc(dbus_data);
+  double velocity_threshold = 0.001;
+  if (b_velocity_ < velocity_threshold && yaw_velocity_ < velocity_threshold)
+    move_state_ = STOP;
+  else
+    move_state_ = MOVING;
+  if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE)
+  {
+    switch (auto_state_)
+    {
+      case OUTPOST:
+        yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+      b_sender_->setPoint(b_outpost_);
+      break;
+      case BASE:
+        yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+      b_sender_->setPoint(b_base_);
+      break;
+    }
+    if (last_dart_door_status_ - dart_launch_opening_status_ ==
+    rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
+    {
+      dart_door_open_times_++;
+      has_fired_num_=0;
+    }
+    if (move_state_ == STOP && launch_state_ != PUSH)
+      launch_state_ = READY;
+    else if (launch_state_ != PUSH && launch_state_ != READY)
+      launch_state_ = NONE;
+    if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
+    {
+      switch (launch_state_)
+      {
+        case NONE:
+          trigger_sender_->setPoint(0.7);
+          a_left_sender_->setPoint(0.0);
+          a_right_sender_->setPoint(0.0);
+          setArmPosition(arm_position_["init"]);
+          break;
+        case READY:
+          if (has_fired_num_ <2)
+          {
+            if (has_launch )
+            {
+              if (ros::Time::now()-last_launch_time_>ros::Duration(2.0))
+              {
+                readyLaunchDart(dart_fired_num_);
+                if (all_ready)
+                {
+                  launch_state_ = PUSH;
+                  has_launch = false;
+                }
+              }
+            }
+            else
+            {
+              readyLaunchDart(dart_fired_num_);
+              if (all_ready)
+              {
+                launch_state_ = PUSH;
+                has_launch = false;
+              }
+            }
+          }
+        break;
+        case PUSH:
+          trigger_sender_->setPoint(0.02);
+          if (!has_launch)
+            has_fired_num_++;
+          has_launch = true;
+          dart_fired_num_++;
+          launch_state_ = READY;
+          setArmPosition(arm_position_["init"]);
+          all_ready = false;
+          ready_ = false;
+          first_send_ = false;
+          central_send_ = false;
+          break;
+      }
+    }
+  }
 }
 
 void Dart2Manual::recordPosition(const rm_msgs::DbusData dbus_data)
@@ -343,7 +432,8 @@ void Dart2Manual::dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data)
     a_left_position_= std::abs(joint_state_.position[a_left_sender_->getIndex()]);
     a_right_position_= std::abs(joint_state_.position[a_right_sender_->getIndex()]);
     trigger_position_= std::abs(joint_state_.position[trigger_sender_->getIndex()]);
-    //ROS_INFO("trigger_position: %lf", trigger_position_);
+    yaw_velocity_ = std::abs(joint_state_.velocity[yaw_sender_->getIndex()]);
+    b_velocity_ = std::abs(joint_state_.velocity[b_sender_->getIndex()]);
   }
   wheel_clockwise_event_.update(data->wheel == 1.0);
   wheel_anticlockwise_event_.update(data->wheel == -1.0);
