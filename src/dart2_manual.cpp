@@ -188,6 +188,7 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
       setArmPosition(arm_position_[getOrdinalName(dart_fired_num)]);
       first_send_ = true;
       last_send_time_ = ros::Time::now();
+      ROS_INFO("dart_fired_num_: %d", dart_fired_num_);
     }
     if (ros::Time::now() - last_send_time_ > ros::Duration(0.5) && !central_send_ )
     {
@@ -259,6 +260,7 @@ void Dart2Manual::leftSwitchMidOn()
       b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
     break;
   }
+  has_count=false;
   readyLaunchDart(dart_fired_num_);
 }
 
@@ -270,8 +272,11 @@ void Dart2Manual::leftSwitchUpOn()
   ready_ = false;
   first_send_ = false;
   central_send_ = false;
-
-  dart_fired_num_++;
+  if (!has_count)
+  {
+    dart_fired_num_++;
+    has_count = true;
+  }
 }
 
 void Dart2Manual::rightSwitchMidRise()
@@ -372,6 +377,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
                 if (all_ready)
                 {
                   launch_state_ = PUSH;
+                  has_count = false;
                   has_launch = false;
                 }
               }
@@ -390,9 +396,15 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
         case PUSH:
           trigger_sender_->setPoint(0.02);
           if (!has_launch)
+          {
             has_fired_num_++;
-          has_launch = true;
-          dart_fired_num_++;
+            has_launch = true;
+          }
+          if (!has_count)
+          {
+            dart_fired_num_++;
+            has_count = true;
+          }
           launch_state_ = READY;
           setArmPosition(arm_position_["init"]);
           all_ready = false;
@@ -447,7 +459,8 @@ std::string Dart2Manual::getOrdinalName(int dart_index) {
     case 2: return "third";
     case 3: return "fourth";
     default:
-      throw std::out_of_range("Invalid dart index: " + std::to_string(dart_index));
+      ROS_ERROR("invalid dart_index: %d", dart_index);
+      return "init";
   }
 }
 void Dart2Manual::setArmPosition(const std::vector<double>& joint_positions) {
