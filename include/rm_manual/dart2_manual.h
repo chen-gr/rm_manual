@@ -92,6 +92,8 @@ protected:
   bool all_ready{false};
   int has_fired_num_{};
   bool has_count{false};
+  bool wait_{false};
+  ros::Time last_time_{};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;

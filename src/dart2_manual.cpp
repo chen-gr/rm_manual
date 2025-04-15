@@ -180,32 +180,15 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
 {
   if (!ready_)
   {
-    trigger_sender_->setPoint(0.02);
+    trigger_sender_->setPoint(trigger_work_);
     a_left_sender_->setPoint(downward_vel_);
     a_right_sender_->setPoint(downward_vel_);
-    if (!first_send_)
-    {
-      setArmPosition(arm_position_[getOrdinalName(dart_fired_num)]);
-      first_send_ = true;
-      last_send_time_ = ros::Time::now();
-      ROS_INFO("dart_fired_num_: %d", dart_fired_num_);
-    }
-    if (ros::Time::now() - last_send_time_ > ros::Duration(0.5) && !central_send_ )
-    {
-      setArmGripperPosition(arm_get_position_);
-      last_send_time_ = ros::Time::now();
-      central_send_ = true;
-    }
-    if (ros::Time::now() - last_send_time_ > ros::Duration(0.5) && central_send_)
-    {
-      setArmPosition(arm_position_["central"]);
-    }
   }
   if (a_left_position_>= a_left_max_ && a_right_position_>= a_right_max_)
   {
     if (!ready_ && triggerIsWorked())
     {
-      trigger_sender_->setPoint(0.7);
+      trigger_sender_->setPoint(trigger_home_);
       ready_ = true;
     }
     a_left_sender_->setPoint(0.0);
@@ -213,9 +196,17 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
   }
   if (triggerIsHome())
   {
-    setArmGripperPosition(arm_put_position_);
-    a_right_sender_->setPoint(upward_vel_);
-    a_left_sender_->setPoint(upward_vel_);
+    if (!wait_)
+    {
+      last_send_time_ = ros::Time::now();
+      wait_ = true;
+    }
+    if (wait_ && ros::Time::now() - last_send_time_ > ros::Duration(0.5))
+    {
+      setArmGripperPosition(arm_put_position_);
+      a_right_sender_->setPoint(upward_vel_);
+      a_left_sender_->setPoint(upward_vel_);
+    }
   }
   if (ready_ && a_left_position_<=a_left_min_ && a_right_position_<=a_right_min_)
   {
@@ -228,7 +219,7 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
 
 void Dart2Manual::leftSwitchDownOn()
 {
-  trigger_sender_->setPoint(0.7);
+  trigger_sender_->setPoint(trigger_home_);
   ready_ = false;
   dart_fired_num_ = 0;
   a_left_sender_->setPoint(0.0);
@@ -240,12 +231,12 @@ void Dart2Manual::leftSwitchDownOn()
 
 bool Dart2Manual::triggerIsWorked() const
 {
-  return trigger_position_ <= trigger_work_;
+  return trigger_position_ <= trigger_confirm_work_;
 }
 
 bool Dart2Manual::triggerIsHome() const
 {
-  return trigger_position_ >= trigger_home_;
+  return trigger_position_ >= trigger_confirm_home_;
 }
 void Dart2Manual::leftSwitchMidOn()
 {
@@ -266,7 +257,7 @@ void Dart2Manual::leftSwitchMidOn()
 
 void Dart2Manual::leftSwitchUpOn()
 {
-  trigger_sender_->setPoint(0.02);
+  trigger_sender_->setPoint(trigger_work_);
 
   setArmPosition(arm_position_["init"]);
   ready_ = false;
@@ -361,7 +352,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
       switch (launch_state_)
       {
         case NONE:
-          trigger_sender_->setPoint(0.7);
+          trigger_sender_->setPoint(trigger_home_);
           a_left_sender_->setPoint(0.0);
           a_right_sender_->setPoint(0.0);
           setArmPosition(arm_position_["init"]);
@@ -394,7 +385,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
           }
         break;
         case PUSH:
-          trigger_sender_->setPoint(0.02);
+          trigger_sender_->setPoint(trigger_work_);
           if (!has_launch)
           {
             has_fired_num_++;
@@ -443,7 +434,7 @@ void Dart2Manual::dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data)
   {
     a_left_position_= std::abs(joint_state_.position[a_left_sender_->getIndex()]);
     a_right_position_= std::abs(joint_state_.position[a_right_sender_->getIndex()]);
-    trigger_position_= std::abs(joint_state_.position[trigger_sender_->getIndex()]);
+    trigger_position_= joint_state_.position[trigger_sender_->getIndex()];
     yaw_velocity_ = std::abs(joint_state_.velocity[yaw_sender_->getIndex()]);
     b_velocity_ = std::abs(joint_state_.velocity[b_sender_->getIndex()]);
   }
