@@ -10,6 +10,7 @@
 #include <rm_msgs/GameRobotStatus.h>
 #include <rm_msgs/GameStatus.h>
 #include <unordered_map>
+#include <rm_msgs/Dart.h>
 
 namespace rm_manual
 {
@@ -62,9 +63,11 @@ protected:
   void launchTwoDart();
   void getDartFiredNum();
   void triggerComeBackProtect();
+  void cameraCalibration();
   void gameRobotStatusCallback(const rm_msgs::GameRobotStatus::ConstPtr& data) override;
   void dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data) override;
   void dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data);
+  void cameraCmdCallback(const rm_msgs::Dart::ConstPtr& data);
   void gameRobotHpCallback(const rm_msgs::GameRobotHp::ConstPtr& data) override;
   void gameStatusCallback(const rm_msgs::GameStatus::ConstPtr& data) override;
   void wheelClockwise();
@@ -72,12 +75,13 @@ protected:
   rm_common::JointPointCommandSender *trigger_sender_, *friction_left_sender_, *friction_right_sender_;
   rm_common::JointPointCommandSender *pitch_sender_, *yaw_sender_;
   rm_common::CalibrationQueue *trigger_calibration_, *gimbal_calibration_;
-  double pitch_outpost_{}, pitch_base_{}, yaw_outpost_{}, yaw_base_{};
+  double pitch_outpost_{}, pitch_base_{}, yaw_outpost_{}, yaw_base_{}, camera_offset_{}, camera_position_status_{},
+      randomTarget_offset_{};
   double qd_, upward_vel_;
   std::unordered_map<int, Dart> dart_list_{};
   std::unordered_map<std::string, std::vector<double>> target_position_{};
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
-  bool if_stop_{ true }, has_stopped{ false };
+  bool if_stop_{ true }, has_stopped_{ false }, if_record_{ true }, has_ready{ false };
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;
@@ -87,6 +91,7 @@ protected:
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
   ros::Subscriber dart_client_cmd_sub_;
+  ros::Subscriber camera_sub_;
   InputEvent dart_client_cmd_event_;
   int outpost_hp_;
   int dart_door_open_times_ = 0, last_dart_door_status_ = 1;

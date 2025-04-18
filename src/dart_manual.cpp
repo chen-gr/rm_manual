@@ -43,7 +43,9 @@ DartManual::DartManual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Manua
   right_switch_up_event_.setRising(boost::bind(&DartManual::rightSwitchUpRise, this));
   wheel_clockwise_event_.setRising(boost::bind(&DartManual::wheelClockwise, this));
   wheel_anticlockwise_event_.setRising(boost::bind(&DartManual::wheelAntiClockwise, this));
-  dbus_sub_ = nh.subscribe<rm_msgs::DbusData>("/dbus_data", 10, &DartManual::dbusDataCallback, this);
+  camera_sub_ = nh.subscribe<rm_msgs::Dart>("/dart_camera_distance", 10, &DartManual::cameraCmdCallback, this);
+
+  dbus_sub_ = nh.subscribe<rm_msgs::DbusData>("/rm_ecat_hw/dbus", 10, &DartManual::dbusDataCallback, this);
   dart_client_cmd_sub_ = nh_referee.subscribe<rm_msgs::DartClientCmd>("dart_client_cmd_data", 10,
                                                                       &DartManual::dartClientCmdCallback, this);
   game_robot_hp_sub_ =
@@ -131,18 +133,21 @@ void DartManual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
   getDartFiredNum();
   if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE)
   {
-    switch (auto_state_)
+    if (dart_launch_opening_status_ != rm_msgs::DartClientCmd::OPENED)
     {
-      case OUTPOST:
-        pitch_sender_->setPoint(pitch_outpost_);
-        yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
-        qd_ = dart_list_[dart_fired_num_].outpost_qd_;
-        break;
-      case BASE:
-        pitch_sender_->setPoint(pitch_base_);
-        yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
-        qd_ = dart_list_[dart_fired_num_].base_qd_;
-        break;
+      switch (auto_state_)
+      {
+        case OUTPOST:
+          pitch_sender_->setPoint(pitch_outpost_);
+          yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+          qd_ = dart_list_[dart_fired_num_].outpost_qd_;
+          break;
+        case BASE:
+          pitch_sender_->setPoint(pitch_base_);
+          yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+          qd_ = dart_list_[dart_fired_num_].base_qd_;
+          break;
+      }
     }
     friction_right_sender_->setPoint(qd_);
     friction_left_sender_->setPoint(qd_);
@@ -151,7 +156,9 @@ void DartManual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
     {
       dart_door_open_times_++;
       initial_dart_fired_num_ = dart_fired_num_;
-      has_stopped = false;
+      if_record_ = true;
+      has_stopped_ = false;
+      has_ready = false;
     }
     if (move_state_ == STOP)
       launch_state_ = AIMED;
@@ -159,14 +166,39 @@ void DartManual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
       launch_state_ = NONE;
     if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
     {
-      switch (launch_state_)
+      if (!has_ready)
+        stop_time_ = ros::Time::now();
+      if (ros::Time::now() - stop_time_ < ros::Duration(1))
       {
-        case NONE:
-          trigger_sender_->setPoint(0.);
-          break;
-        case AIMED:
-          launchTwoDart();
-          break;
+        trigger_sender_->setPoint(0.);
+        has_ready = true;
+      }
+      else
+      {
+        cameraCalibration();
+        switch (auto_state_)
+        {
+          case OUTPOST:
+            pitch_sender_->setPoint(pitch_outpost_);
+            yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+            qd_ = dart_list_[dart_fired_num_].outpost_qd_;
+
+            break;
+          case BASE:
+            pitch_sender_->setPoint(pitch_base_);
+            qd_ = dart_list_[dart_fired_num_].base_qd_;
+            yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_offset_);
+            break;
+        }
+        switch (launch_state_)
+        {
+          case NONE:
+            trigger_sender_->setPoint(0.);
+            break;
+          case AIMED:
+            launchTwoDart();
+            break;
+        }
       }
     }
     else
@@ -199,6 +231,7 @@ void DartManual::leftSwitchDownOn()
   friction_right_sender_->setPoint(0.);
   friction_left_sender_->setPoint(0.);
   trigger_sender_->setPoint(-upward_vel_);
+  if_record_ = false;
   triggerComeBackProtect();
 }
 
@@ -206,16 +239,41 @@ void DartManual::leftSwitchMidOn()
 {
   getDartFiredNum();
   initial_dart_fired_num_ = dart_fired_num_;
-  has_stopped = false;
+  has_stopped_ = false;
+  if_record_ = true;
+  switch (manual_state_)
+  {
+    case OUTPOST:
+      yaw_sender_->setPoint(yaw_outpost_);
+      break;
+    case BASE:
+      yaw_sender_->setPoint(yaw_base_);
+      break;
+  }
   friction_right_sender_->setPoint(qd_);
   friction_left_sender_->setPoint(qd_);
   trigger_sender_->setPoint(0.);
 }
-
 void DartManual::leftSwitchUpOn()
 {
   getDartFiredNum();
-  launchTwoDart();
+  //  获取相机数据
+  cameraCalibration();
+
+  double velocity_threshold = 0.0005;
+  if (yaw_velocity_ > velocity_threshold)
+    move_state_ = STOP;
+  else
+    move_state_ = MOVING;
+  switch (move_state_)
+  {
+    case STOP:
+      trigger_sender_->setPoint(0.);
+      break;
+    case MOVING:
+      launchTwoDart();
+      break;
+  }
   switch (manual_state_)
   {
     case OUTPOST:
@@ -224,9 +282,12 @@ void DartManual::leftSwitchUpOn()
       break;
     case BASE:
       qd_ = dart_list_[dart_fired_num_].base_qd_;
-      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+      //      qd_ = dart_list_[dart_fired_num_].base_qd_ + camera_offset_ * 87.75;
+      randomTarget_offset_ = -camera_offset_ * 0.131625;
+      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_offset_);
       break;
   }
+
   friction_right_sender_->setPoint(qd_);
   friction_left_sender_->setPoint(qd_);
 }
@@ -297,15 +358,34 @@ void DartManual::triggerComeBackProtect()
 
 void DartManual::waitAfterLaunch(double time)
 {
-  if (!has_stopped)
+  if (!has_stopped_)
     stop_time_ = ros::Time::now();
   if (ros::Time::now() - stop_time_ < ros::Duration(time))
   {
     trigger_sender_->setPoint(0.);
-    has_stopped = true;
+    has_stopped_ = true;
   }
   else
     trigger_sender_->setPoint(upward_vel_);
+}
+
+void DartManual::cameraCalibration()
+{
+  if (if_record_)
+  {
+    if (camera_position_status_ < 0)
+    {
+      camera_offset_ = camera_position_status_ * 0.000074;
+    }
+    else if (camera_position_status_ > 0)
+    {
+      //      camera_offset_ =  camera_position_status_ * 0.000064;
+      camera_offset_ = camera_position_status_ * 0.000064;
+    }
+
+    ROS_INFO("camera_offset_:%f\n", camera_offset_);
+    if_record_ = false;
+  }
 }
 
 void DartManual::launchTwoDart()
@@ -371,6 +451,12 @@ void DartManual::dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data)
 void DartManual::dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data)
 {
   dart_launch_opening_status_ = data->dart_launch_opening_status;
+}
+
+void DartManual::cameraCmdCallback(const rm_msgs::Dart::ConstPtr& data)
+{
+  camera_position_status_ = data->distance;
+  // ROS_INFO("distance:%f\n",camera_position_status_);
 }
 
 void DartManual::gameRobotHpCallback(const rm_msgs::GameRobotHp::ConstPtr& data)

@@ -11,6 +11,7 @@
 #include <rm_msgs/GameStatus.h>
 #include <unordered_map>
 #include <dart_msgs/armPosition.h>
+#include <rm_msgs/Dart.h>
 
 namespace rm_manual
 {
@@ -73,6 +74,7 @@ protected:
   std::string getOrdinalName(int dart_index);
   void setArmPosition(const std::vector<double>& joint_positions);
   void setArmGripperPosition(double position);
+  void cameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
 
   rm_common::JointPointCommandSender *yaw_sender_;
   rm_common::JointPointCommandSender *trigger_sender_;
@@ -107,11 +109,16 @@ protected:
   bool first_send_{},central_send_{};
   double b_velocity_ = 0., yaw_velocity_ = 0.;
 
+  double camera_x_set_point_,camera_y_set_point_;
+  double camera_x_offset_,camera_y_offset_;
+  double p_x_,p_y_;
+
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time stop_time_;
   ros::Time last_launch_time_{};
   ros::Time last_send_time_;
   ros::Subscriber dart_client_cmd_sub_;
+  ros::Subscriber camera_data_sub_;
   ros::Publisher arm_position_pub_;
   InputEvent dart_client_cmd_event_;
   int outpost_hp_;

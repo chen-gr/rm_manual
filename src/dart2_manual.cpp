@@ -57,6 +57,7 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   dart_client_cmd_sub_ = nh_referee.subscribe<rm_msgs::DartClientCmd>("dart_client_cmd_data", 10,
                                                                       &Dart2Manual::dartClientCmdCallback, this);
 
+  camera_data_sub_ = nh.subscribe<rm_msgs::Dart>("/track",10,&Dart2Manual::cameraDataCallback, this);
   game_robot_hp_sub_ =
       nh_referee.subscribe<rm_msgs::GameRobotHp>("game_robot_hp", 10, &Dart2Manual::gameRobotHpCallback, this);
   game_status_sub_ =
@@ -247,8 +248,8 @@ void Dart2Manual::leftSwitchMidOn()
       b_sender_->setPoint(b_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
       break;
     case BASE:
-      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
-      b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
+      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_x_set_point_ - camera_x_offset_);
+      b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_y_set_point_ - camera_y_offset_);
     break;
   }
   has_count=false;
@@ -534,4 +535,10 @@ void Dart2Manual::wheelAntiClockwise()
       break;
   }
 }
+void Dart2Manual::cameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
+{
+  camera_y_set_point_ = data->height * p_y_;
+  camera_x_set_point_ = data->distance * p_x_;
+}
+
 } // namespace rm_manual
