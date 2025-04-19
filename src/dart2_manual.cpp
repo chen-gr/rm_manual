@@ -127,11 +127,16 @@ void Dart2Manual::remoteControlTurnOn()
   shooter_calibration_->reset();
 }
 
+void Dart2Manual::updateLaunchMode(uint8_t launch_mode)
+{
+
+}
 void Dart2Manual::run()
 {
   ManualBase::run();
   gimbal_calibration_->update(ros::Time::now());
   shooter_calibration_->update(ros::Time::now());
+  updateLaunchMode(launch_mode_);
 }
 
 void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)

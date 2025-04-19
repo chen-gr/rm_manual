@@ -33,9 +33,12 @@ public:
   };
   enum LaunchMode
   {
-    NONE,
-    READY,
-    PUSH
+    INIT = 0,
+    PULLDOWN = 1,
+    ENGAGE = 2,
+    PULLUP = 3,
+    READY = 4,
+    PUSH = 5
   };
   struct Dart
   {
@@ -75,6 +78,7 @@ protected:
   void setArmPosition(const std::vector<double>& joint_positions);
   void setArmGripperPosition(double position);
   void cameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
+  void updateLaunchMode(uint8_t launch_mode);
 
   rm_common::JointPointCommandSender *yaw_sender_;
   rm_common::JointPointCommandSender *trigger_sender_;
@@ -96,6 +100,7 @@ protected:
   bool has_count{false};
   bool wait_{false};
   ros::Time last_time_{};
+  uint8_t launch_mode_{0};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;
