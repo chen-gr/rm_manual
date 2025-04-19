@@ -57,7 +57,6 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   dart_client_cmd_sub_ = nh_referee.subscribe<rm_msgs::DartClientCmd>("dart_client_cmd_data", 10,
                                                                       &Dart2Manual::dartClientCmdCallback, this);
 
-  camera_data_sub_ = nh.subscribe<rm_msgs::Dart>("/track",10,&Dart2Manual::cameraDataCallback, this);
   game_robot_hp_sub_ =
       nh_referee.subscribe<rm_msgs::GameRobotHp>("game_robot_hp", 10, &Dart2Manual::gameRobotHpCallback, this);
   game_status_sub_ =
@@ -124,9 +123,7 @@ void Dart2Manual::gameStatusCallback(const rm_msgs::GameStatus::ConstPtr& data)
 void Dart2Manual::remoteControlTurnOn()
 {
   ManualBase::remoteControlTurnOn();
-  gimbal_calibration_->stopController();
   gimbal_calibration_->reset();
-  shooter_calibration_->stopController();
   shooter_calibration_->reset();
 }
 
@@ -195,12 +192,14 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
     a_left_sender_->setPoint(0.0);
     a_right_sender_->setPoint(0.0);
   }
-  if (triggerIsHome())
+  if (ready_ && triggerIsHome())
   {
+    ROS_INFO("HOME");
     if (!wait_)
     {
       last_send_time_ = ros::Time::now();
       wait_ = true;
+      ROS_INFO("Waiting for home position");
     }
     if (wait_ && ros::Time::now() - last_send_time_ > ros::Duration(0.5))
     {
@@ -228,6 +227,7 @@ void Dart2Manual::leftSwitchDownOn()
   setArmPosition(arm_position_["init"]);
   first_send_ = false;
   central_send_ = false;
+  wait_ = false;
 }
 
 bool Dart2Manual::triggerIsWorked() const
@@ -248,8 +248,8 @@ void Dart2Manual::leftSwitchMidOn()
       b_sender_->setPoint(b_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
       break;
     case BASE:
-      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_x_set_point_ - camera_x_offset_);
-      b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_ + camera_y_set_point_ - camera_y_offset_);
+      yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+      b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
     break;
   }
   has_count=false;
@@ -264,11 +264,13 @@ void Dart2Manual::leftSwitchUpOn()
   ready_ = false;
   first_send_ = false;
   central_send_ = false;
+  wait_ = false;
   if (!has_count)
   {
     dart_fired_num_++;
     has_count = true;
   }
+  shooter_calibration_->reset();
 }
 
 void Dart2Manual::rightSwitchMidRise()
@@ -350,6 +352,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
       launch_state_ = NONE;
     if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
     {
+      ROS_INFO("Dart2Manual::updatePc: launch open");
       switch (launch_state_)
       {
         case NONE:
@@ -359,6 +362,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
           setArmPosition(arm_position_["init"]);
           break;
         case READY:
+          ROS_INFO("Dart2Manual::updatePc: ready");
           if (has_fired_num_ <2)
           {
             if (has_launch )
@@ -386,6 +390,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
           }
         break;
         case PUSH:
+          ROS_INFO("Dart2Manual::updatePc: launch push");
           trigger_sender_->setPoint(trigger_work_);
           if (!has_launch)
           {
@@ -403,6 +408,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
           ready_ = false;
           first_send_ = false;
           central_send_ = false;
+          wait_=false;
           break;
       }
     }
@@ -483,6 +489,7 @@ void Dart2Manual::setArmGripperPosition(double position)
 void Dart2Manual::dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data)
 {
   dart_launch_opening_status_ = data->dart_launch_opening_status;
+  //ROS_INFO("dart_launch_opening_status:%d",dart_launch_opening_status_);
 }
 
 void Dart2Manual::gameRobotHpCallback(const rm_msgs::GameRobotHp::ConstPtr& data)
@@ -535,10 +542,4 @@ void Dart2Manual::wheelAntiClockwise()
       break;
   }
 }
-void Dart2Manual::cameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
-{
-  camera_y_set_point_ = data->height * p_y_;
-  camera_x_set_point_ = data->distance * p_x_;
-}
-
 } // namespace rm_manual
