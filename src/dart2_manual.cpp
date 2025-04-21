@@ -14,6 +14,10 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh.getParam("targets", targets);
   nh.getParam("arm_positions", arm_positions);
   getList(dart_list, targets, launch_id,arm_positions);
+  yaw_outpost_ = target_position_["outpost"][0];
+  b_outpost_ = target_position_["outpost"][1];
+  yaw_base_ = target_position_["base"][0];
+  b_base_ = target_position_["base"][1];
 
   ros::NodeHandle nh_yaw = ros::NodeHandle(nh, "yaw");
   yaw_sender_ = new rm_common::JointPointCommandSender(nh_yaw, joint_state_);
@@ -123,20 +127,94 @@ void Dart2Manual::gameStatusCallback(const rm_msgs::GameStatus::ConstPtr& data)
 void Dart2Manual::remoteControlTurnOn()
 {
   ManualBase::remoteControlTurnOn();
+  gimbal_calibration_->stopController();
   gimbal_calibration_->reset();
+  shooter_calibration_->stopController();
   shooter_calibration_->reset();
 }
 
-void Dart2Manual::updateLaunchMode(uint8_t launch_mode)
+void Dart2Manual::updateLaunchMode()
 {
+  if (launch_mode_ != last_launch_mode_)
+  {
+    switch (launch_mode_)
+    {
+      case INIT:
+        init();
+        break;
+      case PULLDOWN:
+        pullDown();
+        break;
+      case ENGAGE:
+        engage();
+        break;
+      case PULLUP:
+        pullUp();
+        break;
+      case READY:
+        ready();
+        break;
+      case PUSH:
+        push();
+        break;
+      default:
+        ROS_WARN("Invalid mode.");
+        init();
+        break;
+    }
+  }
+  last_launch_mode_ = launch_mode_;
+}
+void Dart2Manual::init()
+{
+  ROS_INFO("Enter INIT");
+  shooter_calibration_->reset();
+  a_left_sender_->setPoint(0.0);
+  a_right_sender_->setPoint(0.0);
+  trigger_sender_->setPoint(trigger_home_);
+  if (dart_fired_num_ > 4)
+    dart_fired_num_ = 0;
+}
+void Dart2Manual::pullDown()
+{
+  ROS_INFO("Enter PULLDOWN");
+  trigger_sender_->setPoint(trigger_work_);
+  a_left_sender_->setPoint(downward_vel_);
+  a_right_sender_->setPoint(downward_vel_);
+}
+void Dart2Manual::engage()
+{
+  ROS_INFO("Enter ENGAGE");
+  trigger_sender_->setPoint(trigger_home_);
+  a_left_sender_->setPoint(0.0);
+  a_right_sender_->setPoint(0.0);
+  last_engage_time_ = ros::Time::now();
+}
+void Dart2Manual::pullUp()
+{
+  ROS_INFO("Enter PULLUP");
+  a_right_sender_->setPoint(upward_vel_);
+  a_left_sender_->setPoint(upward_vel_);
 
+}
+void Dart2Manual::ready()
+{
+  ROS_INFO("Enter READY");
+  a_right_sender_->setPoint(0.0);
+  a_left_sender_->setPoint(0.0);
+}
+void Dart2Manual::push()
+{
+  ROS_INFO("Enter PUSH");
+  trigger_sender_->setPoint(trigger_work_);
+  dart_fired_num_++;
 }
 void Dart2Manual::run()
 {
   ManualBase::run();
   gimbal_calibration_->update(ros::Time::now());
   shooter_calibration_->update(ros::Time::now());
-  updateLaunchMode(launch_mode_);
+  updateLaunchMode();
 }
 
 void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)
@@ -179,60 +257,21 @@ void Dart2Manual::move(rm_common::JointPointCommandSender* joint, double ch)
   }
 }
 
-void Dart2Manual::readyLaunchDart(int dart_fired_num)
+void Dart2Manual::readyLaunchDart()
 {
-  if (!ready_)
-  {
-    trigger_sender_->setPoint(trigger_work_);
-    a_left_sender_->setPoint(downward_vel_);
-    a_right_sender_->setPoint(downward_vel_);
-  }
-  if (a_left_position_>= a_left_max_ && a_right_position_>= a_right_max_)
-  {
-    if (!ready_ && triggerIsWorked())
-    {
-      trigger_sender_->setPoint(trigger_home_);
-      ready_ = true;
-    }
-    a_left_sender_->setPoint(0.0);
-    a_right_sender_->setPoint(0.0);
-  }
-  if (ready_ && triggerIsHome())
-  {
-    ROS_INFO("HOME");
-    if (!wait_)
-    {
-      last_send_time_ = ros::Time::now();
-      wait_ = true;
-      ROS_INFO("Waiting for home position");
-    }
-    if (wait_ && ros::Time::now() - last_send_time_ > ros::Duration(0.5))
-    {
-      setArmGripperPosition(arm_put_position_);
-      a_right_sender_->setPoint(upward_vel_);
-      a_left_sender_->setPoint(upward_vel_);
-    }
-  }
-  if (ready_ && a_left_position_<=a_left_min_ && a_right_position_<=a_right_min_)
-  {
-    setArmPosition(arm_position_["init"]);
-    a_left_sender_->setPoint(0.0);
-    a_right_sender_->setPoint(0.0);
-    all_ready = true;
-  }
+  if (launch_mode_ == INIT && shooter_calibration_->isCalibrated() && b_velocity_ < 0.001)
+    launch_mode_ = PULLDOWN;
+  if (launch_mode_ == PULLDOWN && a_left_position_ >= a_left_max_ && a_right_position_ >= a_right_max_)
+    launch_mode_ = ENGAGE;
+  if (launch_mode_ == ENGAGE && triggerIsHome() && ros::Time::now() - last_engage_time_ > ros::Duration(0.5))
+    launch_mode_ = PULLUP;
+  if (launch_mode_ == PULLUP && a_left_position_ <= a_left_min_ && a_right_position_ <= a_right_min_)
+    launch_mode_ = READY;
 }
 
 void Dart2Manual::leftSwitchDownOn()
 {
-  trigger_sender_->setPoint(trigger_home_);
-  ready_ = false;
-  dart_fired_num_ = 0;
-  a_left_sender_->setPoint(0.0);
-  a_right_sender_->setPoint(0.0);
-  setArmPosition(arm_position_["init"]);
-  first_send_ = false;
-  central_send_ = false;
-  wait_ = false;
+  launch_mode_ = INIT;
 }
 
 bool Dart2Manual::triggerIsWorked() const
@@ -257,32 +296,19 @@ void Dart2Manual::leftSwitchMidOn()
       b_sender_->setPoint(b_base_ + dart_list_[dart_fired_num_].base_offset_);
     break;
   }
-  has_count=false;
-  readyLaunchDart(dart_fired_num_);
+  readyLaunchDart();
 }
 
 void Dart2Manual::leftSwitchUpOn()
 {
-  trigger_sender_->setPoint(trigger_work_);
-
-  setArmPosition(arm_position_["init"]);
-  ready_ = false;
-  first_send_ = false;
-  central_send_ = false;
-  wait_ = false;
-  if (!has_count)
-  {
-    dart_fired_num_++;
-    has_count = true;
-  }
-  shooter_calibration_->reset();
+  if (launch_mode_ == READY)
+    launch_mode_ = PUSH;
 }
 
 void Dart2Manual::rightSwitchMidRise()
 {
   ManualBase::rightSwitchMidRise();
   dart_door_open_times_ = 0;
-  initial_dart_fired_num_ = 0;
   move_state_ = NORMAL;
 }
 
@@ -320,8 +346,9 @@ void Dart2Manual::rightSwitchDownOn()
 void Dart2Manual::rightSwitchUpRise()
 {
   ManualBase::rightSwitchUpRise();
-  yaw_sender_->setPoint(yaw_outpost_);
-  b_sender_->setPoint(b_outpost_);
+  yaw_sender_->setPoint(yaw_base_);
+  b_sender_->setPoint(b_base_);
+  launch_mode_ = INIT;
 }
 
 void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
@@ -337,13 +364,15 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
     switch (auto_state_)
     {
       case OUTPOST:
-        yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
-      b_sender_->setPoint(b_outpost_);
-      break;
+        // yaw_sender_->setPoint(yaw_outpost_ + dart_list_[dart_fired_num_].outpost_offset_);
+        // b_sender_->setPoint(b_outpost_);
+        yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
+        b_sender_->setPoint(b_base_);
+        break;
       case BASE:
         yaw_sender_->setPoint(yaw_base_ + dart_list_[dart_fired_num_].base_offset_);
-      b_sender_->setPoint(b_base_);
-      break;
+        b_sender_->setPoint(b_base_);
+        break;
     }
     if (last_dart_door_status_ - dart_launch_opening_status_ ==
     rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
@@ -351,72 +380,27 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
       dart_door_open_times_++;
       has_fired_num_=0;
     }
-    if (move_state_ == STOP && launch_state_ != PUSH)
-      launch_state_ = READY;
-    else if (launch_state_ != PUSH && launch_state_ != READY)
-      launch_state_ = NONE;
     if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
     {
-      ROS_INFO("Dart2Manual::updatePc: launch open");
-      switch (launch_state_)
+      switch (move_state_)
       {
-        case NONE:
-          trigger_sender_->setPoint(trigger_home_);
-          a_left_sender_->setPoint(0.0);
-          a_right_sender_->setPoint(0.0);
-          setArmPosition(arm_position_["init"]);
+        case MOVING:
+          launch_mode_ = INIT;
           break;
-        case READY:
-          ROS_INFO("Dart2Manual::updatePc: ready");
-          if (has_fired_num_ <2)
+        case STOP:
+          if (has_fired_num_ < 2)
           {
-            if (has_launch )
+            readyLaunchDart();
+            if (launch_mode_ == READY)
             {
-              if (ros::Time::now()-last_launch_time_>ros::Duration(2.0))
-              {
-                readyLaunchDart(dart_fired_num_);
-                if (all_ready)
-                {
-                  launch_state_ = PUSH;
-                  has_count = false;
-                  has_launch = false;
-                }
-              }
-            }
-            else
-            {
-              readyLaunchDart(dart_fired_num_);
-              if (all_ready)
-              {
-                launch_state_ = PUSH;
-                has_launch = false;
-              }
+              launch_mode_ = PUSH;
+              has_fired_num_++;
             }
           }
-        break;
-        case PUSH:
-          ROS_INFO("Dart2Manual::updatePc: launch push");
-          trigger_sender_->setPoint(trigger_work_);
-          if (!has_launch)
-          {
-            has_fired_num_++;
-            has_launch = true;
-          }
-          if (!has_count)
-          {
-            dart_fired_num_++;
-            has_count = true;
-          }
-          launch_state_ = READY;
-          setArmPosition(arm_position_["init"]);
-          all_ready = false;
-          ready_ = false;
-          first_send_ = false;
-          central_send_ = false;
-          wait_=false;
           break;
       }
     }
+    last_dart_door_status_ = dart_launch_opening_status_;
   }
 }
 
@@ -427,7 +411,7 @@ void Dart2Manual::recordPosition(const rm_msgs::DbusData dbus_data)
     if (manual_state_ == OUTPOST)
     {
       yaw_outpost_ = joint_state_.position[yaw_sender_->getIndex()];
-      b_outpost_=joint_state_.position[b_sender_->getIndex()];
+      b_outpost_ = joint_state_.position[b_sender_->getIndex()];
       ROS_INFO("Recorded outpost position.");
     }
     else if (manual_state_ == BASE)
@@ -494,7 +478,6 @@ void Dart2Manual::setArmGripperPosition(double position)
 void Dart2Manual::dartClientCmdCallback(const rm_msgs::DartClientCmd::ConstPtr& data)
 {
   dart_launch_opening_status_ = data->dart_launch_opening_status;
-  //ROS_INFO("dart_launch_opening_status:%d",dart_launch_opening_status_);
 }
 
 void Dart2Manual::gameRobotHpCallback(const rm_msgs::GameRobotHp::ConstPtr& data)

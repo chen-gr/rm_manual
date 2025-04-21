@@ -48,8 +48,6 @@ ChassisGimbalShooterManual::ChassisGimbalShooterManual(ros::NodeHandle& nh, ros:
   e_event_.setEdge(boost::bind(&ChassisGimbalShooterManual::ePress, this),
                    boost::bind(&ChassisGimbalShooterManual::eRelease, this));
   c_event_.setRising(boost::bind(&ChassisGimbalShooterManual::cPress, this));
-  q_event_.setEdge(boost::bind(&ChassisGimbalShooterManual::qPress, this),
-                   boost::bind(&ChassisGimbalShooterManual::qRelease, this));
   b_event_.setEdge(boost::bind(&ChassisGimbalShooterManual::bPress, this),
                    boost::bind(&ChassisGimbalShooterManual::bRelease, this));
   x_event_.setEdge(boost::bind(&ChassisGimbalShooterManual::xPress, this),
@@ -92,9 +90,6 @@ void ChassisGimbalShooterManual::ecatReconnected()
 void ChassisGimbalShooterManual::checkReferee()
 {
   manual_to_referee_pub_data_.power_limit_state = chassis_cmd_sender_->power_limit_->getState();
-  manual_to_referee_pub_data_.cap_error_detected = chassis_cmd_sender_->power_limit_->isCapErrorDetected();
-  manual_to_referee_pub_data_.cap_error = chassis_cmd_sender_->power_limit_->isCapErrorActive();
-  manual_to_referee_pub_data_.start_busrt_time = chassis_cmd_sender_->power_limit_->getStartBurstTime();
   manual_to_referee_pub_data_.shoot_frequency = shooter_cmd_sender_->getShootFrequency();
   manual_to_referee_pub_data_.gimbal_eject = gimbal_cmd_sender_->getEject();
   manual_to_referee_pub_data_.det_armor_target = switch_armor_target_srv_->getArmorTarget();
@@ -115,6 +110,7 @@ void ChassisGimbalShooterManual::checkKeyboard(const rm_msgs::DbusData::ConstPtr
   x_event_.update(dbus_data->key_x & !dbus_data->key_ctrl);
   r_event_.update((!dbus_data->key_ctrl) & dbus_data->key_r);
   v_event_.update((!dbus_data->key_ctrl) & dbus_data->key_v);
+  z_event_.update((!dbus_data->key_ctrl) & dbus_data->key_z);
   ctrl_f_event_.update(dbus_data->key_f & dbus_data->key_ctrl);
   ctrl_v_event_.update(dbus_data->key_ctrl & dbus_data->key_v);
   ctrl_b_event_.update(dbus_data->key_ctrl & dbus_data->key_b & !dbus_data->key_shift);
@@ -603,6 +599,16 @@ void ChassisGimbalShooterManual::xRelease()
 void ChassisGimbalShooterManual::vPress()
 {
   shooter_cmd_sender_->raiseSpeed();
+}
+
+void ChassisGimbalShooterManual::zPress()
+{
+  if (chassis_cmd_sender_->getMsg()->mode != rm_msgs::ChassisCmd::RAW && !is_gyro_)
+  {
+    setChassisMode(rm_msgs::ChassisCmd::DEPLOY);
+  }
+  else
+    setChassisMode(rm_msgs::ChassisCmd::FOLLOW);
 }
 
 void ChassisGimbalShooterManual::shiftPress()

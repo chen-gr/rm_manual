@@ -63,7 +63,7 @@ protected:
   void move(rm_common::JointPointCommandSender* joint, double ch);
   void recordPosition(const rm_msgs::DbusData dbus_data);
   void waitAfterLaunch(const double time);
-  void readyLaunchDart(int dart_fired_num);
+  void readyLaunchDart();
   void getDartFiredNum();
   bool triggerIsWorked() const;
   bool triggerIsHome() const;
@@ -78,7 +78,13 @@ protected:
   void setArmPosition(const std::vector<double>& joint_positions);
   void setArmGripperPosition(double position);
   void cameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
-  void updateLaunchMode(uint8_t launch_mode);
+  void updateLaunchMode();
+  void init();
+  void pullDown();
+  void pullUp();
+  void engage();
+  void ready();
+  void push();
 
   rm_common::JointPointCommandSender *yaw_sender_;
   rm_common::JointPointCommandSender *trigger_sender_;
@@ -97,15 +103,15 @@ protected:
   bool has_launch{false};
   bool all_ready{false};
   int has_fired_num_{};
-  bool has_count{false};
+  bool has_count_{false};
   bool wait_{false};
   ros::Time last_time_{};
-  uint8_t launch_mode_{0};
+  uint8_t launch_mode_{0},last_launch_mode_{6};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_, dart_launch_opening_status_;
 
-  int dart_fired_num_ = 0, initial_dart_fired_num_ = 0;
+  int dart_fired_num_ = 0;
   double trigger_home_{},trigger_work_{};
   double trigger_confirm_home_{},trigger_confirm_work_{};
   double a_left_position_{}, a_right_position_{},trigger_position_{};
@@ -119,6 +125,7 @@ protected:
   double p_x_,p_y_;
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
+  ros::Time last_engage_time_{};
   ros::Time stop_time_;
   ros::Time last_launch_time_{};
   ros::Time last_send_time_;
@@ -128,7 +135,7 @@ protected:
   InputEvent dart_client_cmd_event_;
   int outpost_hp_;
   int dart_door_open_times_ = 0, last_dart_door_status_ = 1;
-  int auto_state_ = OUTPOST, manual_state_ = OUTPOST, move_state_ = NORMAL, launch_state_ = NONE;
+  int auto_state_ = BASE, manual_state_ = BASE, move_state_ = NORMAL, launch_state_ = INIT;
 };
 
 }
