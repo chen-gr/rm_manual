@@ -133,8 +133,10 @@ protected:
   double camera_x_offset_,camera_y_offset_;
   double long_camera_p_x_,short_camera_p_x_,long_camera_p_y_;
   bool is_long_camera_found_{false},is_short_camera_found_{false},is_long_camera_aim_{};
-  double long_camera_x_{},long_camera_y_{},short_camera_x_{},short_camera_y_{};
+  double long_camera_x_{},long_camera_y_{},short_camera_x_{},short_camera_y_{}, last_camera_x{};
   double long_camera_x_threshold_,long_camera_detach_threshold_;
+  bool camera_central_{},is_adjust_{};
+  double last_long_camera_x_set_point{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};
