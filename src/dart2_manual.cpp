@@ -406,12 +406,12 @@ void Dart2Manual::leftSwitchMidOn()
   {
       updateCameraData();
   }
-  //updateCameraData();
+ //updateCameraData();
 }
 
 void Dart2Manual::leftSwitchUpOn()
 {
-  if (launch_mode_ == READY && is_long_camera_aim_)
+  if (launch_mode_ == READY && (is_long_camera_aim_ || !is_short_camera_found_))
     launch_mode_ = PUSH;
 }
 
@@ -462,7 +462,7 @@ void Dart2Manual::rightSwitchUpRise()
 void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
 {
   ManualBase::updatePc(dbus_data);
-  double velocity_threshold = 0.001;
+  double velocity_threshold = 1.0;
   if (b_velocity_ < velocity_threshold && yaw_velocity_ < velocity_threshold)
     move_state_ = STOP;
   else
@@ -482,44 +482,49 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
         b_sender_->setPoint(b_base_ + long_camera_y_set_point_);
         break;
     }
-    if (last_dart_door_status_ - dart_launch_opening_status_ ==
-    rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
+    if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE)
     {
-      has_fired_num_=0;
-      ROS_INFO("has fired num: %d",has_fired_num_);
-    }
-    if (last_dart_door_status_ - dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED - rm_msgs::DartClientCmd::OPENING_OR_CLOSING)
-    {
-      allow_dart_door_open_times_ --;
-      ROS_INFO("allow dart_door open times_: %d", allow_dart_door_open_times_);
-    }
-    if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE && allow_dart_door_open_times_)
-    {
-      readyLaunchDart(dart_fired_num_);
-     // ROS_INFO("Dart2Manual::updatePc: launch ready");
-      if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
+      if (last_dart_door_status_ - dart_launch_opening_status_ ==
+rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
       {
-        switch (move_state_)
+        has_fired_num_=0;
+        ROS_INFO("has fired num: %d",has_fired_num_);
+      }
+      if (last_dart_door_status_ - dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED - rm_msgs::DartClientCmd::OPENING_OR_CLOSING)
+      {
+        allow_dart_door_open_times_ --;
+        ROS_INFO("allow dart_door open times_: %d", allow_dart_door_open_times_);
+      }
+      if (allow_dart_door_open_times_ > 0)
+      {
+        readyLaunchDart(dart_fired_num_);
+        // ROS_INFO("Dart2Manual::updatePc: launch ready");
+        if (launch_mode_ == READY)
+          updateCameraData();
+        if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
         {
-          case MOVING:
-            break;
-          case STOP:
-            if (has_fired_num_ < 2)
-            {
-              readyLaunchDart(dart_fired_num_);
-              if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(1.0) && last_ready_time_ > last_push_time_ && is_long_camera_aim_)
+          switch (move_state_)
+          {
+            case MOVING:
+              break;
+            case STOP:
+              if (has_fired_num_ < 2)
               {
-                launch_mode_ = PUSH;
-                has_fired_num_++;
-                ROS_INFO("has fired_num_=%d", has_fired_num_);
+                readyLaunchDart(dart_fired_num_);
+                if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(1.0) && last_ready_time_ > last_push_time_ && is_long_camera_aim_)
+                {
+                  launch_mode_ = PUSH;
+                  has_fired_num_++;
+                  ROS_INFO("has fired_num_=%d", has_fired_num_);
+                }
+                if (launch_mode_ == PUSH && last_push_time_ > last_ready_time_ && ros::Time::now() - last_push_time_ > ros::Duration(1.0))
+                {
+                  ROS_INFO("now time: %f; last push time: %f",ros::Time::now().toSec(),last_push_time_.toSec());
+                  launch_mode_ = INIT;
+                }
               }
-              if (launch_mode_ == PUSH && last_push_time_ > last_ready_time_ && ros::Time::now() - last_push_time_ > ros::Duration(1.0))
-              {
-                ROS_INFO("now time: %f; last push time: %f",ros::Time::now().toSec(),last_push_time_.toSec());
-                launch_mode_ = INIT;
-              }
-            }
-            break;
+              break;
+          }
         }
       }
     }
@@ -588,7 +593,8 @@ void Dart2Manual::updateAllowDartDoorOpenTimes()
   {
     allow_dart_door_open_times_++;
     triggered_4min_ = true;
-    launch_mode_ = INIT;
+    if (launch_mode_ == PUSH)
+      launch_mode_ = INIT;
     ROS_INFO("420s into the match. allow dart door open times: %d",allow_dart_door_open_times_);
   }
 }
@@ -679,7 +685,7 @@ void Dart2Manual::updateCameraData()
         is_long_camera_aim_ = true;
         is_adjust_ = false;
     }
-    ROS_INFO("long camera set point:%f",long_camera_x_set_point_);
+    //ROS_INFO("long camera set point:%f",long_camera_x_set_point_);
   }
   if(!is_long_camera_found_)
   {
