@@ -355,19 +355,19 @@ void Dart2Manual::move(rm_common::JointPointCommandSender* joint, double ch)
 
 void Dart2Manual::readyLaunchDart(int dart_fired_num)
 {
-  if (launch_mode_ == INIT && shooter_calibration_->isCalibrated() && b_velocity_ < 0.001 && ros::Time::now() - last_init_time_ > ros::Duration(0.3) && last_init_time_ > last_push_time_)
+  if (launch_mode_ == INIT && shooter_calibration_->isCalibrated() && b_velocity_ < 0.001 && ros::Time::now() - last_init_time_ > ros::Duration(0.2) && last_init_time_ > last_push_time_)
     launch_mode_ = PULLDOWN;
   if (launch_mode_ == PULLDOWN && a_left_position_ >= a_left_place_ && a_right_position_ >= a_right_place_ && dart_fired_num !=0)
     launch_mode_ = ROTATE_PLACE;
-  if (launch_mode_ == ROTATE_PLACE && dart_fired_num !=0 && rotate_velocity_ < 0.01 && confirm_place_ && ros::Time::now() - last_rotate_time_ > ros::Duration(0.9))
+  if (launch_mode_ == ROTATE_PLACE && dart_fired_num !=0 && rotate_velocity_ < 0.01 && confirm_place_ && ros::Time::now() - last_rotate_time_ > ros::Duration(0.3))
       launch_mode_ = LOADING;
   if (launch_mode_ == LOADING && a_left_position_ <= a_left_placed_ && a_right_position_ <= a_right_placed_ && dart_fired_num !=0)
     launch_mode_ = ROTATE_BACK;
-  if (launch_mode_ == ROTATE_BACK && dart_fired_num !=0 && rotate_velocity_ < 0.01 && confirm_back_ && ros::Time::now() - last_rotate_time_ > ros::Duration(0.6))
+  if (launch_mode_ == ROTATE_BACK && dart_fired_num !=0 && rotate_velocity_ < 0.01 && confirm_back_ && ros::Time::now() - last_rotate_time_ > ros::Duration(0.3))
       launch_mode_ = LOADED;
   if ((launch_mode_ == LOADED || launch_mode_ == PULLDOWN) && a_left_position_ >= a_left_max_ && a_right_position_ >= a_right_max_)
     launch_mode_ = ENGAGE;
-  if (launch_mode_ == ENGAGE && triggerIsHome() && ros::Time::now() - last_engage_time_ > ros::Duration(0.5))
+  if (launch_mode_ == ENGAGE && triggerIsHome() && ros::Time::now() - last_engage_time_ > ros::Duration(0.2))
     launch_mode_ = PULLUP;
   if (launch_mode_ == PULLUP && a_left_position_ <= a_left_min_ && a_right_position_ <= a_right_min_)
     launch_mode_ = READY;
@@ -511,13 +511,13 @@ rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
               if (has_fired_num_ < 2)
               {
                 readyLaunchDart(dart_fired_num_);
-                if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(1.0) && last_ready_time_ > last_push_time_ && is_long_camera_aim_)
+                if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(0.3) && last_ready_time_ > last_push_time_ && is_long_camera_aim_)
                 {
                   launch_mode_ = PUSH;
                   has_fired_num_++;
                   ROS_INFO("has fired_num_=%d", has_fired_num_);
                 }
-                if (launch_mode_ == PUSH && last_push_time_ > last_ready_time_ && ros::Time::now() - last_push_time_ > ros::Duration(1.0))
+                if (launch_mode_ == PUSH && last_push_time_ > last_ready_time_ && ros::Time::now() - last_push_time_ > ros::Duration(0.3))
                 {
                   ROS_INFO("now time: %f; last push time: %f",ros::Time::now().toSec(),last_push_time_.toSec());
                   launch_mode_ = INIT;
