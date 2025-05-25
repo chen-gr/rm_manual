@@ -137,6 +137,8 @@ protected:
   double long_camera_x_threshold_,long_camera_detach_threshold_;
   bool camera_central_{},is_adjust_{};
   double last_long_camera_x_set_point{};
+  bool camera_is_online_{};
+  bool use_auto_aim_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};
@@ -144,6 +146,7 @@ protected:
   ros::Time last_push_time_{};
   ros::Time last_ready_time_{};
   ros::Time last_init_time_{};
+  ros::Time last_get_camera_data_time_{};
   ros::Subscriber dart_client_cmd_sub_;
   ros::Subscriber long_camera_data_sub_;
   ros::Subscriber short_camera_data_sub_;

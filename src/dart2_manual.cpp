@@ -70,6 +70,7 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh_camera.getParam("short_camera_p_x", short_camera_p_x_);
   nh_camera.getParam("long_camera_x_threshold", long_camera_x_threshold_);
   nh_camera.getParam("long_camera_detach_threshold", long_camera_detach_threshold_);
+  nh_camera.getParam("use_auto_aim", use_auto_aim_);
 
   left_switch_up_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchUpOn, this));
   left_switch_mid_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchMidOn, this));
@@ -304,6 +305,7 @@ void Dart2Manual::push()
   ROS_INFO("Launch dart num:%d",dart_fired_num_);
   last_push_time_ = ros::Time::now();
   is_long_camera_aim_ = false;
+  is_adjust_ = false;
 }
 void Dart2Manual::run()
 {
@@ -482,6 +484,8 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
         b_sender_->setPoint(b_base_ + long_camera_y_set_point_);
         break;
     }
+    if ( dart_launch_opening_status_ != 1 && game_progress_ !=rm_msgs::GameStatus::IN_BATTLE)
+      updateCameraData();
     if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE)
     {
       if (last_dart_door_status_ - dart_launch_opening_status_ ==
@@ -511,7 +515,7 @@ rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
               if (has_fired_num_ < 2)
               {
                 readyLaunchDart(dart_fired_num_);
-                if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(0.3) && last_ready_time_ > last_push_time_ && is_long_camera_aim_)
+                if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(0.3) && last_ready_time_ > last_push_time_ && is_adjust_)
                 {
                   launch_mode_ = PUSH;
                   has_fired_num_++;
@@ -668,42 +672,46 @@ void Dart2Manual::wheelAntiClockwise()
 
 void Dart2Manual::updateCameraData()
 {
-   if(abs(long_camera_x_ - last_camera_x) > abs(long_camera_x_))
-   {
-       camera_central_ = true;
-       long_camera_x_set_point_ = last_long_camera_x_set_point - long_camera_x_ * long_camera_p_x_ * 100;
-   }
-  if (is_short_camera_found_ && !is_long_camera_found_)
+  camera_is_online_ = (ros::Time::now() - last_get_camera_data_time_ < ros::Duration(1.0));
+  if (camera_is_online_)
   {
-    short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
-  }
-  if (is_long_camera_found_ && !is_long_camera_aim_)
-  {
-    long_camera_x_set_point_ += long_camera_x_ * long_camera_p_x_;
-    long_camera_y_set_point_ = long_camera_y_ * long_camera_p_y_;
-    if (std::abs(long_camera_x_) <= long_camera_x_threshold_ && long_camera_x_ != 0 && yaw_velocity_ < 0.001) {
-        is_long_camera_aim_ = true;
-        is_adjust_ = false;
+    if(abs(long_camera_x_ - last_camera_x) > abs(long_camera_x_))
+    {
+      camera_central_ = true;
+      long_camera_x_set_point_ = last_long_camera_x_set_point - long_camera_x_ * long_camera_p_x_ * 100;
     }
-    //ROS_INFO("long camera set point:%f",long_camera_x_set_point_);
-  }
-  if(!is_long_camera_found_)
-  {
+    if (is_short_camera_found_ && !is_long_camera_found_)
+    {
+      short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
+    }
+    if (is_long_camera_found_ && !is_long_camera_aim_)
+    {
+      long_camera_x_set_point_ += long_camera_x_ * long_camera_p_x_;
+      long_camera_y_set_point_ = long_camera_y_ * long_camera_p_y_;
+      if (std::abs(long_camera_x_) <= long_camera_x_threshold_ && long_camera_x_ != 0 && yaw_velocity_ < 0.001) {
+        ROS_INFO("aim");
+        is_long_camera_aim_ = true;
+      }
+      //ROS_INFO("long camera set point:%f",long_camera_x_set_point_);
+    }
+    if(!is_long_camera_found_)
+    {
       is_long_camera_aim_= false;
       camera_central_ = false;
-  }
-  if (is_long_camera_aim_ && !is_adjust_)
-  {
-    //long_camera_x_set_point_ += camera_x_offset_;
-   // long_camera_y_set_point_ += camera_y_offset_;
-    long_camera_x_set_point_ += dart_list_[dart_fired_num_].base_offset_;
-    long_camera_y_set_point_ += dart_list_[dart_fired_num_].base_tension_;
+    }
+    if (is_long_camera_aim_ && !is_adjust_)
+    {
+      //long_camera_x_set_point_ += camera_x_offset_;
+      // long_camera_y_set_point_ += camera_y_offset_;
+      long_camera_x_set_point_ += dart_list_[dart_fired_num_].base_offset_;
+      long_camera_y_set_point_ += dart_list_[dart_fired_num_].base_tension_;
       camera_central_ = false;
-      is_adjust_ = true;
-      ROS_INFO("aim");
-  }
+       is_adjust_ = true;
+      ROS_INFO("adjust");
+    }
     last_camera_x = long_camera_x_;
-  last_long_camera_x_set_point = long_camera_x_set_point_;
+    last_long_camera_x_set_point = long_camera_x_set_point_;
+  }
 }
 
 void Dart2Manual::longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
@@ -711,7 +719,6 @@ void Dart2Manual::longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
   is_long_camera_found_ = data->is_found;
   long_camera_x_ = data->distance;
   long_camera_y_ = data->height;
-  //ROS_INFO("time error:%f",(ros::Time::now() - data->stamp).toSec());
 }
 
 void Dart2Manual::shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
@@ -719,6 +726,7 @@ void Dart2Manual::shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
   is_short_camera_found_ = data->is_found;
   short_camera_x_ = data->distance;
   short_camera_y_ = data->height;
+  last_get_camera_data_time_ = data->stamp;
 }
 
 } // namespace rm_manual
