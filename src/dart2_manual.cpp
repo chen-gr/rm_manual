@@ -70,7 +70,6 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh_camera.getParam("short_camera_p_x", short_camera_p_x_);
   nh_camera.getParam("long_camera_x_threshold", long_camera_x_threshold_);
   nh_camera.getParam("long_camera_detach_threshold", long_camera_detach_threshold_);
-  nh_camera.getParam("use_auto_aim", use_auto_aim_);
 
   left_switch_up_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchUpOn, this));
   left_switch_mid_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchMidOn, this));
@@ -403,12 +402,12 @@ void Dart2Manual::leftSwitchMidOn()
       b_sender_->setPoint(b_base_  + long_camera_y_set_point_);
     break;
   }
-  readyLaunchDart(dart_fired_num_);
+ // readyLaunchDart(dart_fired_num_);
   if(launch_mode_ == READY)
   {
       updateCameraData();
   }
- //updateCameraData();
+ updateCameraData();
 }
 
 void Dart2Manual::leftSwitchUpOn()
@@ -719,6 +718,8 @@ void Dart2Manual::longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
   is_long_camera_found_ = data->is_found;
   long_camera_x_ = data->distance;
   long_camera_y_ = data->height;
+  last_get_camera_data_time_ = data->stamp;
+  //ROS_INFO("time error:%f",(ros::Time::now() - data->stamp).toSec());
 }
 
 void Dart2Manual::shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
@@ -726,7 +727,7 @@ void Dart2Manual::shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
   is_short_camera_found_ = data->is_found;
   short_camera_x_ = data->distance;
   short_camera_y_ = data->height;
-  last_get_camera_data_time_ = data->stamp;
+  //last_get_camera_data_time_ = data->stamp;
 }
 
 } // namespace rm_manual
