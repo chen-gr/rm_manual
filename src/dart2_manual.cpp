@@ -69,7 +69,7 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh_camera.getParam("long_camera_p_y", long_camera_p_y_);
   nh_camera.getParam("short_camera_p_x", short_camera_p_x_);
   nh_camera.getParam("long_camera_x_threshold", long_camera_x_threshold_);
-  nh_camera.getParam("long_camera_detach_threshold", long_camera_detach_threshold_);
+  nh_camera.getParam("long_camera_detach_threshold", retarget_threshold);
 
   left_switch_up_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchUpOn, this));
   left_switch_mid_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchMidOn, this));
@@ -159,13 +159,13 @@ void Dart2Manual::updateLaunchMode()
         pullDown();
         break;
       case ROTATE_PLACE:
-        rotate_place();
+        rotatePlace();
         break;
       case LOADING:
         loading();
         break;
       case ROTATE_BACK:
-        rotate_back();
+        rotateBack();
         break;
       case LOADED:
         loaded();
@@ -200,6 +200,8 @@ void Dart2Manual::init()
     dart_fired_num_ = 0;
   if (dart_fired_num_ == 0)
     rotate_sender_->setPoint(1.04017);
+  if (last_launch_mode_ == PUSH)
+    long_camera_x_after_push_ = long_camera_x_;
   last_init_time_ = ros::Time::now();
 }
 void Dart2Manual::pullDown()
@@ -209,7 +211,7 @@ void Dart2Manual::pullDown()
   a_left_sender_->setPoint(downward_vel_);
   a_right_sender_->setPoint(downward_vel_);
 }
-void Dart2Manual::rotate_place()
+void Dart2Manual::rotatePlace()
 {
   ROS_INFO("Enter ROTATE_PLACE");
   a_left_sender_->setPoint(0.0);
@@ -241,7 +243,7 @@ void Dart2Manual::loading()
   confirm_place_ = false;
 }
 
-void Dart2Manual::rotate_back()
+void Dart2Manual::rotateBack()
 {
   ROS_INFO("Enter ROTATE_BACK");
   a_left_sender_->setPoint(0.0);
@@ -306,12 +308,94 @@ void Dart2Manual::push()
   is_long_camera_aim_ = false;
   is_adjust_ = false;
 }
+
+void Dart2Manual::updateAutoAimState()
+{
+  switch(auto_aim_state_)
+  {
+    case AIM:
+      if (last_auto_aim_state_ != auto_aim_state_)
+        ROS_INFO("Enter AIM.");
+      aim();
+      break;
+    case ADJUST:
+      if (last_auto_aim_state_ != auto_aim_state_)
+        ROS_INFO("Enter ADJUST.");
+      adjust();
+      break;
+  }
+  last_auto_aim_state_ = auto_aim_state_;
+}
+
+void Dart2Manual::aim()
+{
+  if (is_short_camera_found_ && !is_long_camera_found_)
+  {
+    short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
+  }
+  if (is_long_camera_found_)
+  {
+    long_camera_x_set_point_ += long_camera_x_ * long_camera_p_x_;
+    long_camera_y_set_point_ = long_camera_y_ * long_camera_p_y_;
+  }
+  if (std::abs(long_camera_x_) <= long_camera_x_threshold_ && long_camera_x_ != 0 && yaw_velocity_ < 0.001)
+  {
+    ROS_INFO("The %d dart had aimed.Now x error:%lf, yaw position: %lf ",dart_fired_num_,long_camera_x_,joint_state_.position[yaw_sender_->getIndex()]);
+    auto_aim_state_ = AIMED;
+  }
+}
+
+void Dart2Manual::adjust()
+{
+  if (dart_fired_num_ == 0)
+  {
+    long_camera_x_set_point_ += dart_list_[dart_fired_num_].base_offset_;
+    long_camera_y_set_point_ += dart_list_[dart_fired_num_].base_tension_;
+  }
+  else
+  {
+    long_camera_x_set_point_ += (dart_list_[dart_fired_num_].base_offset_ - dart_list_[dart_fired_num_ - 1].base_offset_);
+    long_camera_y_set_point_ += (dart_list_[dart_fired_num_].base_tension_ - dart_list_[dart_fired_num_ - 1].base_tension_);
+  }
+  if (yaw_velocity_ < 0.001)
+  {
+    ROS_INFO("The %d dart had adjusted.Now x error:%lf, yaw position: %lf ",dart_fired_num_,long_camera_x_,joint_state_.position[yaw_sender_->getIndex()]);
+    long_camera_x_before_push_ = long_camera_x_;
+    auto_aim_state_ = ADJUSTED;
+  }
+}
+
+void Dart2Manual::autoAim()
+{
+  camera_is_online_ = (ros::Time::now() - last_get_camera_data_time_ < ros::Duration(1.0));
+  if (use_auto_aim_ )
+  {
+    if (camera_is_online_)
+    {
+      if (dart_fired_num_ == 0)
+        auto_aim_state_ = AIM;
+      if (dart_fired_num_ != 0)
+      {
+        if (abs(long_camera_x_after_push_ - long_camera_x_before_push_) < retarget_threshold)
+          auto_aim_state_ = ADJUST;
+        else
+          auto_aim_state_ = AIM;
+      }
+      if (auto_aim_state_ == AIMED)
+        auto_aim_state_ = ADJUST;
+    }
+  }
+  else
+    auto_aim_state_ = ADJUST;
+}
+
 void Dart2Manual::run()
 {
   ManualBase::run();
   gimbal_calibration_->update(ros::Time::now());
   shooter_calibration_->update(ros::Time::now());
   updateLaunchMode();
+  updateAutoAimState();
 }
 
 void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)
@@ -405,9 +489,9 @@ void Dart2Manual::leftSwitchMidOn()
  // readyLaunchDart(dart_fired_num_);
   if(launch_mode_ == READY)
   {
-      updateCameraData();
+      autoAim();
   }
- updateCameraData();
+  autoAim();
 }
 
 void Dart2Manual::leftSwitchUpOn()
@@ -484,7 +568,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
         break;
     }
     if ( dart_launch_opening_status_ != 1 && game_progress_ !=rm_msgs::GameStatus::IN_BATTLE)
-      updateCameraData();
+      autoAim();
     if (game_progress_ == rm_msgs::GameStatus::IN_BATTLE)
     {
       if (last_dart_door_status_ - dart_launch_opening_status_ ==
@@ -503,7 +587,7 @@ rm_msgs::DartClientCmd::OPENING_OR_CLOSING - rm_msgs::DartClientCmd::OPENED)
         readyLaunchDart(dart_fired_num_);
         // ROS_INFO("Dart2Manual::updatePc: launch ready");
         if (launch_mode_ == READY)
-          updateCameraData();
+          autoAim();
         if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
         {
           switch (move_state_)
@@ -569,18 +653,6 @@ void Dart2Manual::dbusDataCallback(const rm_msgs::DbusData::ConstPtr& data)
   wheel_clockwise_event_.update(data->wheel == 1.0);
   wheel_anticlockwise_event_.update(data->wheel == -1.0);
   dbus_data_ = *data;
-}
-
-std::string Dart2Manual::getOrdinalName(int dart_index) {
-  switch (dart_index) {
-    case 0: return "first";
-    case 1: return "second";
-    case 2: return "third";
-    case 3: return "fourth";
-    default:
-      ROS_ERROR("invalid dart_index: %d", dart_index);
-      return "init";
-  }
 }
 
 void Dart2Manual::updateAllowDartDoorOpenTimes()

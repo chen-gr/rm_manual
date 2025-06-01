@@ -43,6 +43,15 @@ public:
     READY = 8,
     PUSH = 9
   };
+  enum AutoAimState
+  {
+    NONE,
+    AIM,
+    AIMED,
+    ADJUST,
+    ADJUSTED,
+    FINISH
+  };
   struct Dart
   {
     double outpost_offset_, base_offset_;
@@ -76,21 +85,24 @@ protected:
   void updateAllowDartDoorOpenTimes();
   void wheelClockwise();
   void wheelAntiClockwise();
-  std::string getOrdinalName(int dart_index);
   void longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
   void shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
   void updateCameraData();
   void updateLaunchMode();
+  void updateAutoAimState();
   void init();
   void pullDown();
-  void rotate_place();
+  void rotatePlace();
   void loading();
-  void rotate_back();
+  void rotateBack();
   void loaded();
   void pullUp();
   void engage();
   void ready();
   void push();
+  void aim();
+  void adjust();
+  void autoAim();
 
   rm_common::JointPointCommandSender *yaw_sender_;
   rm_common::JointPointCommandSender *trigger_sender_;
@@ -116,6 +128,7 @@ protected:
   bool confirm_place_{false},confirm_back_{false};
   ros::Time last_time_{};
   uint8_t launch_mode_{0},last_launch_mode_{6};
+  uint8_t auto_aim_state_{0},last_auto_aim_state_{};
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_{}, dart_launch_opening_status_{3};
@@ -134,11 +147,12 @@ protected:
   double long_camera_p_x_,short_camera_p_x_,long_camera_p_y_;
   bool is_long_camera_found_{false},is_short_camera_found_{false},is_long_camera_aim_{};
   double long_camera_x_{},long_camera_y_{},short_camera_x_{},short_camera_y_{}, last_camera_x{};
-  double long_camera_x_threshold_,long_camera_detach_threshold_;
+  double long_camera_x_threshold_,retarget_threshold;
   bool camera_central_{},is_adjust_{};
   double last_long_camera_x_set_point{};
   bool camera_is_online_{};
   bool use_auto_aim_{};
+  double long_camera_x_before_push_{},long_camera_x_after_push_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};
