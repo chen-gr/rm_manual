@@ -247,16 +247,22 @@ void ChassisGimbalShooterCoverManual::zRelease()
   shooter_cmd_sender_->setShootFrequency(last_shoot_freq_);
 }
 
-void ChassisGimbalShooterCoverManual::xPressing() {
+void ChassisGimbalShooterCoverManual::xPressing()
+{
   const ros::Time time = ros::Time::now();
-  if (time - last_send_time_ > ros::Duration(0.05)) {
-    if (track_data_.id != 0) {
+  if (time - last_send_time_ > ros::Duration(0.05))
+  {
+    if (track_data_.id != 0)
+    {
       return;
     }
     double roll{}, pitch{}, yaw{};
-    try {
+    try
+    {
       quatToRPY(tf_buffer_.lookupTransform("odom", "yaw", ros::Time(0)).transform.rotation, roll, pitch, yaw);
-    } catch (tf2::TransformException &ex) {
+    }
+    catch (tf2::TransformException& ex)
+    {
       ROS_WARN("%s", ex.what());
     }
     double traj_yaw = yaw;
@@ -267,7 +273,8 @@ void ChassisGimbalShooterCoverManual::xPressing() {
   }
 }
 
-void ChassisGimbalShooterCoverManual::xRelease() {
+void ChassisGimbalShooterCoverManual::xRelease()
+{
   gimbal_cmd_sender_->setMode(rm_msgs::GimbalCmd::RATE);
 }
 

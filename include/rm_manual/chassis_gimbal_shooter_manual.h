@@ -95,11 +95,9 @@ protected:
   void rPress();
   virtual void qPress()
   {
-
   }
   void qRelease()
   {
-
   }
   void ctrlFPress()
   {

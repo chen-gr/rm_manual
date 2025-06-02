@@ -58,7 +58,7 @@ protected:
   double exit_buff_mode_duration_{};
   double gyro_speed_limit_{};
   double sin_gyro_base_scale_{ 1. }, sin_gyro_amplitude_{ 0. }, sin_gyro_period_{ 1. }, sin_gyro_phase_{ 0. };
-  double pass_hole_angle_{0.};
+  double pass_hole_angle_{ 0. };
   rm_common::SwitchDetectionCaller* switch_buff_srv_{};
   rm_common::SwitchDetectionCaller* switch_buff_type_srv_{};
   rm_common::SwitchDetectionCaller* switch_exposure_srv_{};

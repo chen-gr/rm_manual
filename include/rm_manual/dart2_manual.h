@@ -57,6 +57,7 @@ public:
     double outpost_offset_, base_offset_;
     double outpost_tension_, base_tension_;
   };
+
 protected:
   void sendCommand(const ros::Time& time) override;
   void getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpcValue& targets,
@@ -104,11 +105,11 @@ protected:
   void adjust();
   void autoAim();
 
-  rm_common::JointPointCommandSender *yaw_sender_;
-  rm_common::JointPointCommandSender *trigger_sender_;
-  rm_common::JointPointCommandSender *rotate_sender_;
-  rm_common::JointPointCommandSender *a_left_sender_, *a_right_sender_; //TODO : 修改名字
-  rm_common::JointPointCommandSender *b_sender_;  // TODO : 修改名字
+  rm_common::JointPointCommandSender* yaw_sender_;
+  rm_common::JointPointCommandSender* trigger_sender_;
+  rm_common::JointPointCommandSender* rotate_sender_;
+  rm_common::JointPointCommandSender *a_left_sender_, *a_right_sender_;  // TODO : 修改名字
+  rm_common::JointPointCommandSender* b_sender_;                         // TODO : 修改名字
   rm_common::CalibrationQueue *shooter_calibration_, *gimbal_calibration_;
 
   double b_outpost_{}, b_base_{}, yaw_outpost_{}, yaw_base_{};
@@ -119,40 +120,42 @@ protected:
   std::unordered_map<std::string, std::vector<double>> rotate_position_{};
 
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
-  bool if_stop_{ true }, has_stopped{ false },is_reach_{false},is_calibrate_{false},trigger_has_work_{false},ready_{false};
-  bool has_launch{false};
-  bool all_ready{false};
+  bool if_stop_{ true }, has_stopped{ false }, is_reach_{ false }, is_calibrate_{ false }, trigger_has_work_{ false },
+      ready_{ false };
+  bool has_launch{ false };
+  bool all_ready{ false };
   int has_fired_num_{};
-  bool has_count_{false};
-  bool wait_{false};
-  bool confirm_place_{false},confirm_back_{false};
+  bool has_count_{ false };
+  bool wait_{ false };
+  bool confirm_place_{ false }, confirm_back_{ false };
   ros::Time last_time_{};
-  uint8_t launch_mode_{0},last_launch_mode_{6};
-  uint8_t auto_aim_state_{0},last_auto_aim_state_{};
+  uint8_t launch_mode_{ 0 }, last_launch_mode_{ 6 };
+  uint8_t auto_aim_state_{ 0 }, last_auto_aim_state_{};
 
   rm_msgs::DbusData dbus_data_;
-  uint8_t robot_id_, game_progress_{}, dart_launch_opening_status_{3};
-  uint16_t remain_time_{420};
+  uint8_t robot_id_, game_progress_{}, dart_launch_opening_status_{ 3 };
+  uint16_t remain_time_{ 420 };
 
   int dart_fired_num_ = 0;
-  double trigger_home_{},trigger_work_{};
-  double trigger_confirm_home_{},trigger_confirm_work_{};
-  double a_left_position_{}, a_right_position_{},trigger_position_{};
-  double a_left_max_{}, a_right_max_{}, a_left_min_{}, a_right_min_{}, a_left_place_{}, a_right_place_{}, a_left_placed_{}, a_right_placed_{};
-  bool first_send_{},central_send_{};
+  double trigger_home_{}, trigger_work_{};
+  double trigger_confirm_home_{}, trigger_confirm_work_{};
+  double a_left_position_{}, a_right_position_{}, trigger_position_{};
+  double a_left_max_{}, a_right_max_{}, a_left_min_{}, a_right_min_{}, a_left_place_{}, a_right_place_{},
+      a_left_placed_{}, a_right_placed_{};
+  bool first_send_{}, central_send_{};
   double b_velocity_ = 0., yaw_velocity_ = 0., rotate_velocity_ = 0.;
 
-  double short_camera_x_set_point_,long_camera_x_set_point_,long_camera_y_set_point_;
-  double camera_x_offset_,camera_y_offset_;
-  double long_camera_p_x_,short_camera_p_x_,long_camera_p_y_;
-  bool is_long_camera_found_{false},is_short_camera_found_{false},is_long_camera_aim_{};
-  double long_camera_x_{},long_camera_y_{},short_camera_x_{},short_camera_y_{}, last_camera_x{};
-  double long_camera_x_threshold_,retarget_threshold;
-  bool camera_central_{},is_adjust_{};
+  double short_camera_x_set_point_, long_camera_x_set_point_, long_camera_y_set_point_;
+  double camera_x_offset_, camera_y_offset_;
+  double long_camera_p_x_, short_camera_p_x_, long_camera_p_y_;
+  bool is_long_camera_found_{ false }, is_short_camera_found_{ false }, is_long_camera_aim_{};
+  double long_camera_x_{}, long_camera_y_{}, short_camera_x_{}, short_camera_y_{}, last_camera_x{};
+  double long_camera_x_threshold_, retarget_threshold;
+  bool camera_central_{}, is_adjust_{};
   double last_long_camera_x_set_point{};
   bool camera_is_online_{};
   bool use_auto_aim_{};
-  double long_camera_x_before_push_{},long_camera_x_after_push_{};
+  double long_camera_x_before_push_{}, long_camera_x_after_push_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};
@@ -167,8 +170,8 @@ protected:
   InputEvent dart_client_cmd_event_;
   int outpost_hp_;
   int allow_dart_door_open_times_ = 0, last_dart_door_status_ = 1;
-  bool triggered_30s_{false}, triggered_4min_{false};
+  bool triggered_30s_{ false }, triggered_4min_{ false };
   int auto_state_ = BASE, manual_state_ = BASE, move_state_ = NORMAL, launch_state_ = INIT;
 };
 
-}
+}  // namespace rm_manual
