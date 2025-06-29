@@ -52,10 +52,15 @@ public:
     ADJUSTED,
     FINISH
   };
+  enum ClampMode
+  {
+    ClAMP,
+    RELEASE
+  };
   struct Dart
   {
     double outpost_offset_, base_offset_;
-    double outpost_tension_, base_tension_;
+    double outpost_range_, base_range_;
   };
 
 protected:
@@ -108,16 +113,17 @@ protected:
   rm_common::JointPointCommandSender* yaw_sender_;
   rm_common::JointPointCommandSender* trigger_sender_;
   rm_common::JointPointCommandSender* rotate_sender_;
-  rm_common::JointPointCommandSender *a_left_sender_, *a_right_sender_;  // TODO : 修改名字
-  rm_common::JointPointCommandSender* b_sender_;                         // TODO : 修改名字
+  rm_common::JointPointCommandSender *clamp_left_sender_, *clamp_right_sender_, *clamp_mid_sender_;
+  rm_common::JointPointCommandSender* belt_left_sender_, *belt_right_sender_;
+  rm_common::JointPointCommandSender* range_sender_;
   rm_common::CalibrationQueue *shooter_calibration_, *gimbal_calibration_;
 
-  double b_outpost_{}, b_base_{}, yaw_outpost_{}, yaw_base_{};
-  double first_place_{}, first_back_{}, second_place_{}, second_back_{}, third_place_{}, third_back_{};
+  double range_outpost_{}, range_base_{}, yaw_outpost_{}, yaw_base_{};
   double downward_vel_, upward_vel_;
   std::unordered_map<int, Dart> dart_list_{};
   std::unordered_map<std::string, std::vector<double>> target_position_{};
   std::unordered_map<std::string, std::vector<double>> rotate_position_{};
+  std::vector<double> rotate_place_position_{}, rotate_back_position_{};
 
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
   bool if_stop_{ true }, has_stopped{ false }, is_reach_{ false }, is_calibrate_{ false }, trigger_has_work_{ false },
@@ -139,11 +145,11 @@ protected:
   int dart_fired_num_ = 0;
   double trigger_home_{}, trigger_work_{};
   double trigger_confirm_home_{}, trigger_confirm_work_{};
-  double a_left_position_{}, a_right_position_{}, trigger_position_{};
-  double a_left_max_{}, a_right_max_{}, a_left_min_{}, a_right_min_{}, a_left_place_{}, a_right_place_{},
-      a_left_placed_{}, a_right_placed_{};
-  bool first_send_{}, central_send_{};
-  double b_velocity_ = 0., yaw_velocity_ = 0., rotate_velocity_ = 0.;
+  double belt_left_position_{}, belt_right_position_{}, trigger_position_{};
+  double belt_left_max_{}, belt_right_max_{}, belt_left_min_{}, belt_right_min_{}, belt_left_place_{}, belt_right_place_{},
+      belt_left_placed_{}, belt_right_placed_{};
+  double clamp_position_,release_position_;
+  double range_velocity_ = 0., yaw_velocity_ = 0., rotate_velocity_ = 0.;
 
   double short_camera_x_set_point_, long_camera_x_set_point_, long_camera_y_set_point_;
   double camera_x_offset_, camera_y_offset_;
