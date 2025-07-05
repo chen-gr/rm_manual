@@ -91,6 +91,9 @@ protected:
   void updateAllowDartDoorOpenTimes();
   void wheelClockwise();
   void wheelAntiClockwise();
+  void setGripperAction(int dart_fired_num);
+  void changeGripperState(rm_common::JointPointCommandSender* gripper, bool& is_release);
+  void changeAllGripperState();
   void longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
   void shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
   void updateCameraData();
@@ -116,7 +119,7 @@ protected:
   rm_common::JointPointCommandSender *clamp_left_sender_, *clamp_right_sender_, *clamp_mid_sender_;
   rm_common::JointPointCommandSender* belt_left_sender_, *belt_right_sender_;
   rm_common::JointPointCommandSender* range_sender_;
-  rm_common::CalibrationQueue *shooter_calibration_, *gimbal_calibration_;
+  rm_common::CalibrationQueue *shooter_calibration_, *gimbal_calibration_, *clamp_calibration_;
 
   double range_outpost_{}, range_base_{}, yaw_outpost_{}, yaw_base_{};
   double downward_vel_, upward_vel_;
@@ -133,6 +136,8 @@ protected:
   int has_fired_num_{};
   bool has_count_{ false };
   bool wait_{ false };
+  bool clamp_calibrate_{ false };
+  bool left_clamp_is_release_{ false },mid_clamp_is_release_{false},right_clamp_is_release_{false};
   bool confirm_place_{ false }, confirm_back_{ false };
   ros::Time last_time_{};
   uint8_t launch_mode_{ 0 }, last_launch_mode_{ 6 };
@@ -162,10 +167,12 @@ protected:
   bool camera_is_online_{};
   bool use_auto_aim_{};
   double long_camera_x_before_push_{}, long_camera_x_after_push_{};
+  bool y_p_flag_,y_n_flag_{},x_p_flag_{},x_n_flag_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};
   ros::Time last_rotate_time_{};
+  ros::Time last_loading_time_{};
   ros::Time last_push_time_{};
   ros::Time last_ready_time_{};
   ros::Time last_init_time_{};
