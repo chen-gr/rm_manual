@@ -148,7 +148,7 @@ protected:
   uint16_t remain_time_{ 420 };
 
   int dart_fired_num_ = 0;
-  double trigger_home_{}, trigger_work_{};
+  double trigger_home_command_{}, trigger_work_command_{};
   double trigger_confirm_home_{}, trigger_confirm_work_{};
   double belt_left_position_{}, belt_right_position_{}, trigger_position_{};
   double belt_left_max_{}, belt_right_max_{}, belt_left_min_{}, belt_right_min_{}, belt_left_place_{}, belt_right_place_{},

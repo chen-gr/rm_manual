@@ -26,8 +26,8 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   ros::NodeHandle nh_rotate = ros::NodeHandle(nh, "rotate");
   rotate_sender_ = new rm_common::JointPointCommandSender(nh_rotate, joint_state_);
 
-  nh_trigger.getParam("trigger_home", trigger_home_);
-  nh_trigger.getParam("trigger_work", trigger_work_);
+  nh_trigger.getParam("trigger_home_command", trigger_home_command_);
+  nh_trigger.getParam("trigger_work_command", trigger_work_command_);
   nh_trigger.getParam("trigger_confirm_home", trigger_confirm_home_);
   nh_trigger.getParam("trigger_confirm_work", trigger_confirm_work_);
 
@@ -209,7 +209,7 @@ void Dart2Manual::init()
   shooter_calibration_->reset();
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
-  trigger_sender_->setPoint(trigger_home_);
+  trigger_sender_->setPoint(trigger_home_command_);
   if (dart_fired_num_ > 3)
     dart_fired_num_ = 0;
   rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
@@ -220,7 +220,7 @@ void Dart2Manual::init()
 void Dart2Manual::pullDown()
 {
   ROS_INFO("Enter PULLDOWN");
-  trigger_sender_->setPoint(trigger_work_);
+  trigger_sender_->setPoint(trigger_work_command_);
   belt_left_sender_->setPoint(downward_vel_);
   belt_right_sender_->setPoint(downward_vel_);
 }
@@ -263,7 +263,7 @@ void Dart2Manual::loaded()
 void Dart2Manual::engage()
 {
   ROS_INFO("Enter ENGAGE");
-  trigger_sender_->setPoint(trigger_home_);
+  trigger_sender_->setPoint(trigger_home_command_);
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
   last_engage_time_ = ros::Time::now();
@@ -286,7 +286,7 @@ void Dart2Manual::ready()
 void Dart2Manual::push()
 {
   ROS_INFO("Enter PUSH");
-  trigger_sender_->setPoint(trigger_work_);
+  trigger_sender_->setPoint(trigger_work_command_);
   dart_fired_num_++;
   ROS_INFO("Launch dart num:%d", dart_fired_num_);
   last_push_time_ = ros::Time::now();
