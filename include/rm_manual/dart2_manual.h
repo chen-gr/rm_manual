@@ -43,6 +43,14 @@ public:
     READY = 8,
     PUSH = 9
   };
+  enum ClampType
+  {
+    ZERO = 0,
+    LEFT = 1,
+    MID = 2,
+    RIGHT = 3,
+    ALL = 4
+  };
   enum AutoAimState
   {
     NONE,
@@ -78,6 +86,7 @@ protected:
   void rightSwitchUpRise() override;
   void updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data) override;
   void updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data) override;
+  void updateGripper();
   void move(rm_common::JointPointCommandSender* joint, double ch);
   void recordPosition(const rm_msgs::DbusData dbus_data);
   void readyLaunchDart(int dart_fired_num);
@@ -94,9 +103,9 @@ protected:
   void setGripperAction(int dart_fired_num);
   void changeGripperState(rm_common::JointPointCommandSender* gripper, bool& is_release);
   void changeAllGripperState();
+  void operateGripper(const rm_msgs::DbusData::ConstPtr& dbus_data);
   void longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
   void shortCameraDataCallback(const rm_msgs::Dart::ConstPtr& data);
-  void updateCameraData();
   void updateLaunchMode();
   void updateAutoAimState();
   void init();
@@ -131,17 +140,14 @@ protected:
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
   bool if_stop_{ true }, has_stopped{ false }, is_reach_{ false }, is_calibrate_{ false }, trigger_has_work_{ false },
       ready_{ false };
-  bool has_launch{ false };
-  bool all_ready{ false };
   int has_fired_num_{};
-  bool has_count_{ false };
-  bool wait_{ false };
   bool clamp_calibrate_{ false };
   bool left_clamp_is_release_{ false },mid_clamp_is_release_{false},right_clamp_is_release_{false};
   bool confirm_place_{ false }, confirm_back_{ false };
   ros::Time last_time_{};
   uint8_t launch_mode_{ 0 }, last_launch_mode_{ 6 };
   uint8_t auto_aim_state_{ 0 }, last_auto_aim_state_{};
+  uint8_t gripper_state_{ 0 }, last_gripper_state_{ 0 };
 
   rm_msgs::DbusData dbus_data_;
   uint8_t robot_id_, game_progress_{}, dart_launch_opening_status_{ 3 };
@@ -167,7 +173,6 @@ protected:
   bool camera_is_online_{};
   bool use_auto_aim_{};
   double long_camera_x_before_push_{}, long_camera_x_after_push_{};
-  bool y_p_flag_,y_n_flag_{},x_p_flag_{},x_n_flag_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
   ros::Time last_engage_time_{};

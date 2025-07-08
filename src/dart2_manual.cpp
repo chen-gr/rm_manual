@@ -215,6 +215,7 @@ void Dart2Manual::init()
   rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
   if (last_launch_mode_ == PUSH)
     long_camera_x_after_push_ = long_camera_x_;
+  auto_aim_state_ = NONE;
   last_init_time_ = ros::Time::now();
 }
 void Dart2Manual::pullDown()
@@ -291,7 +292,6 @@ void Dart2Manual::push()
   ROS_INFO("Launch dart num:%d", dart_fired_num_);
   last_push_time_ = ros::Time::now();
   is_long_camera_aim_ = false;
-  is_adjust_ = false;
 }
 
 void Dart2Manual::updateAutoAimState()
@@ -347,8 +347,8 @@ void Dart2Manual::adjust()
   }
   if (yaw_velocity_ < 0.001)
   {
-    ROS_INFO("The %d dart had adjusted.Now x error:%lf, yaw position: %lf ", dart_fired_num_, long_camera_x_,
-             joint_state_.position[yaw_sender_->getIndex()]);
+    ROS_INFO("The %d dart had adjusted.Now x error:%lf, yaw position: %lf ,range position: %lf", dart_fired_num_, long_camera_x_,
+             joint_state_.position[yaw_sender_->getIndex()], joint_state_.position[range_sender_->getIndex()]);
     long_camera_x_before_push_ = long_camera_x_;
     auto_aim_state_ = ADJUSTED;
   }
@@ -357,24 +357,21 @@ void Dart2Manual::adjust()
 void Dart2Manual::autoAim()
 {
   camera_is_online_ = (ros::Time::now() - last_get_camera_data_time_ < ros::Duration(1.0));
-  if (use_auto_aim_)
+  if (use_auto_aim_ && camera_is_online_)
   {
-    if (camera_is_online_)
+    if (dart_fired_num_ == 0)
+      auto_aim_state_ = AIM;
+    if (dart_fired_num_ != 0)
     {
-      if (dart_fired_num_ == 0)
-        auto_aim_state_ = AIM;
-      if (dart_fired_num_ != 0)
-      {
-        if (abs(long_camera_x_after_push_ - long_camera_x_before_push_) < retarget_threshold)
-          auto_aim_state_ = ADJUST;
-        else
-          auto_aim_state_ = AIM;
-      }
-      if (auto_aim_state_ == AIMED)
+      if (abs(long_camera_x_after_push_ - long_camera_x_before_push_) < retarget_threshold)
         auto_aim_state_ = ADJUST;
+      else
+        auto_aim_state_ = AIM;
     }
+    if (auto_aim_state_ == AIMED)
+      auto_aim_state_ = ADJUST;
   }
-  else
+  else if (auto_aim_state_ != ADJUSTED)
     auto_aim_state_ = ADJUST;
 }
 
@@ -386,42 +383,19 @@ void Dart2Manual::run()
   clamp_calibration_->update(ros::Time::now());
   updateLaunchMode();
   updateAutoAimState();
+  updateGripper();
 }
-
 
 void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)
 {
   ManualBase::updateRc(dbus_data);
-  move(yaw_sender_, dbus_data->ch_r_x);
-  move(range_sender_, dbus_data->ch_r_y);
-  if (dbus_data->ch_l_y > 0.85 && y_p_flag_)
-  {
-    changeGripperState(clamp_left_sender_, left_clamp_is_release_);
-    y_p_flag_ = false;
+  if (std::abs(dbus_data->ch_r_x) > 0.1){
+    move(yaw_sender_, dbus_data->ch_r_x);
   }
-  else if (dbus_data->ch_l_y < 0.3 && !y_p_flag_)
-    y_p_flag_ = true;
-  if (dbus_data->ch_l_x > 0.85 && x_p_flag_)
-  {
-    changeGripperState(clamp_mid_sender_, mid_clamp_is_release_);
-    x_p_flag_ = false;
+  if (std::abs(dbus_data->ch_r_y) > 0.1){
+    move(range_sender_, dbus_data->ch_r_y);
   }
-  else if (dbus_data->ch_l_x < 0.3 && !x_p_flag_)
-    x_p_flag_ = true;
-  if (dbus_data->ch_l_y < -0.85 && y_n_flag_)
-  {
-    changeGripperState(clamp_right_sender_, right_clamp_is_release_);
-    y_n_flag_ = false;
-  }
-  else if (dbus_data->ch_l_y > -0.3 && !y_n_flag_)
-    y_n_flag_ = true;
-  if (dbus_data->ch_l_x < -0.85 && x_n_flag_)
-  {
-    changeAllGripperState();
-    x_n_flag_ = false;
-  }
-  else if (dbus_data->ch_l_x > -0.3 && !x_n_flag_)
-    x_n_flag_ = true;
+  operateGripper(dbus_data);
 }
 
 void Dart2Manual::sendCommand(const ros::Time& time)
@@ -630,7 +604,6 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
       if (allow_dart_door_open_times_ > 0)
       {
         readyLaunchDart(dart_fired_num_);
-        // ROS_INFO("Dart2Manual::updatePc: launch ready");
         if (launch_mode_ == READY)
           autoAim();
         if (dart_launch_opening_status_ == rm_msgs::DartClientCmd::OPENED)
@@ -644,7 +617,7 @@ void Dart2Manual::updatePc(const rm_msgs::DbusData::ConstPtr& dbus_data)
               {
                 readyLaunchDart(dart_fired_num_);
                 if (launch_mode_ == READY && ros::Time::now() - last_ready_time_ > ros::Duration(0.3) &&
-                    last_ready_time_ > last_push_time_ && is_adjust_)
+                    last_ready_time_ > last_push_time_ && auto_aim_state_ == ADJUSTED)
                 {
                   launch_mode_ = PUSH;
                   has_fired_num_++;
@@ -721,6 +694,31 @@ void Dart2Manual::updateAllowDartDoorOpenTimes()
   }
 }
 
+void Dart2Manual::updateGripper(){
+  if (last_gripper_state_ != gripper_state_)
+  {
+    switch (gripper_state_) {
+      case LEFT:
+        ROS_INFO("Left gripper change state.");
+        changeGripperState(clamp_left_sender_, left_clamp_is_release_);
+        break;
+      case MID:
+        ROS_INFO("Mid gripper change state.");
+        changeGripperState(clamp_mid_sender_, mid_clamp_is_release_);
+        break;
+      case RIGHT:
+        ROS_INFO("Right gripper change state.");
+        changeGripperState(clamp_right_sender_, right_clamp_is_release_);
+        break;
+      case ALL:
+        ROS_INFO("All gripper change state.");
+        changeAllGripperState();
+        break;
+    }
+  }
+  last_gripper_state_ = gripper_state_;
+}
+
 void Dart2Manual::gameStatusCallback(const rm_msgs::GameStatus::ConstPtr& data)
 {
   ManualBase::gameStatusCallback(data);
@@ -788,51 +786,6 @@ void Dart2Manual::wheelAntiClockwise()
   }
 }
 
-void Dart2Manual::updateCameraData()
-{
-  camera_is_online_ = (ros::Time::now() - last_get_camera_data_time_ < ros::Duration(1.0));
-  if (camera_is_online_)
-  {
-    if (abs(long_camera_x_ - last_camera_x) > abs(long_camera_x_))
-    {
-      camera_central_ = true;
-      long_camera_x_set_point_ = last_long_camera_x_set_point - long_camera_x_ * long_camera_p_x_ * 100;
-    }
-    if (is_short_camera_found_ && !is_long_camera_found_)
-    {
-      short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
-    }
-    if (is_long_camera_found_ && !is_long_camera_aim_)
-    {
-      long_camera_x_set_point_ += long_camera_x_ * long_camera_p_x_;
-      long_camera_y_set_point_ = long_camera_y_ * long_camera_p_y_;
-      if (std::abs(long_camera_x_) <= long_camera_x_threshold_ && long_camera_x_ != 0 && yaw_velocity_ < 0.001)
-      {
-        ROS_INFO("aim");
-        is_long_camera_aim_ = true;
-      }
-      // ROS_INFO("long camera set point:%f",long_camera_x_set_point_);
-    }
-    if (!is_long_camera_found_)
-    {
-      is_long_camera_aim_ = false;
-      camera_central_ = false;
-    }
-    if (is_long_camera_aim_ && !is_adjust_)
-    {
-      // long_camera_x_set_point_ += camera_x_offset_;
-      // long_camera_y_set_point_ += camera_y_offset_;
-      long_camera_x_set_point_ += dart_list_[dart_fired_num_].base_offset_;
-      long_camera_y_set_point_ += dart_list_[dart_fired_num_].base_range_;
-      camera_central_ = false;
-      is_adjust_ = true;
-      ROS_INFO("adjust");
-    }
-    last_camera_x = long_camera_x_;
-    last_long_camera_x_set_point = long_camera_x_set_point_;
-  }
-}
-
 void Dart2Manual::longCameraDataCallback(const rm_msgs::Dart::ConstPtr& data)
 {
   is_long_camera_found_ = data->is_found;
@@ -862,12 +815,42 @@ void Dart2Manual::setGripperAction(int dart_fired_num)
       break;
     case 2:
       clamp_mid_sender_ -> setPoint(release_position_);
+      clamp_left_sender_ -> setPoint(clamp_position_);
       mid_clamp_is_release_ = true;
+      left_clamp_is_release_ = false;
       break;
     case 3:
       clamp_right_sender_ -> setPoint(release_position_);
+      clamp_mid_sender_ -> setPoint(clamp_position_);
       right_clamp_is_release_ = true;
+      mid_clamp_is_release_ = false;
       break;
   }
 }
+
+void Dart2Manual::operateGripper(const rm_msgs::DbusData::ConstPtr& dbus_data)
+{
+  if (dbus_data->ch_l_y > 0.75)
+  {
+    gripper_state_ = MID;
+    return;
+  }
+  if (dbus_data->ch_l_x > 0.75)
+  {
+    gripper_state_ = RIGHT;
+    return;
+  }
+  if (dbus_data->ch_l_y < -0.75)
+  {
+    gripper_state_ = ALL;
+    return;
+  }
+  if (dbus_data->ch_l_x < -0.75)
+  {
+    gripper_state_ = LEFT;
+    return;
+  }
+  gripper_state_ = ZERO;
+}
+
 }  // namespace rm_manual
