@@ -31,9 +31,12 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh_trigger.getParam("trigger_confirm_home", trigger_confirm_home_);
   nh_trigger.getParam("trigger_confirm_work", trigger_confirm_work_);
 
-  ros::NodeHandle nh_clamp = ros::NodeHandle(nh, "clamp");
-  nh_clamp.getParam("clamp_position", clamp_position_);
+  ros::NodeHandle nh_clamp = ros::NodeHandle(nh, "clamp_positions");
+  nh_clamp.getParam("clamp_left_position", clamp_left_position_);
+  nh_clamp.getParam("clamp_mid_position", clamp_mid_position_);
+  nh_clamp.getParam("clamp_right_position", clamp_right_position_);
   nh_clamp.getParam("release_position", release_position_);
+  nh_clamp.getParam("clamp_finish_position", clamp_finish_position_);
 
   ros::NodeHandle nh_belt_left = ros::NodeHandle(nh, "belt_left");
   ros::NodeHandle nh_belt_right = ros::NodeHandle(nh, "belt_right");
@@ -59,6 +62,9 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   clamp_left_sender_ = new rm_common::JointPointCommandSender(nh_clamp_left,joint_state_);
   clamp_mid_sender_ = new rm_common::JointPointCommandSender(nh_clamp_mid,joint_state_);
   clamp_right_sender_ = new rm_common::JointPointCommandSender(nh_clamp_right,joint_state_);
+  clamp_position_.insert(std::make_pair(clamp_left_sender_, clamp_left_position_));
+  clamp_position_.insert(std::make_pair(clamp_mid_sender_, clamp_mid_position_));
+  clamp_position_.insert(std::make_pair(clamp_right_sender_, clamp_right_position_));
 
   XmlRpc::XmlRpcValue shooter_rpc_value, gimbal_rpc_value,clamp_rpc_value;
   nh.getParam("shooter_calibration", shooter_rpc_value);
@@ -128,15 +134,23 @@ void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpc
     position[1] = static_cast<double>(target.second["position"][1]);
     target_position_.insert(std::make_pair(target.first, position));
   }
-  for (const auto& rotate_position : rotate_positions)
+  ROS_ASSERT(rotate_positions.getType() == XmlRpc::XmlRpcValue::TypeArray);
+  for (int i = 0; i < rotate_positions.size(); i++)
   {
-    ROS_ASSERT(rotate_position.second.hasMember("angle"));
-    ROS_ASSERT(rotate_position.second["angle"].getType() == XmlRpc::XmlRpcValue::TypeArray);
-    std::vector<double> angle(2);
-    angle[0] = static_cast<double>(rotate_position.second["angle"][0]);
-    angle[1] = static_cast<double>(rotate_position.second["angle"][1]);
-    rotate_place_position_.push_back(angle[0]);
-    rotate_back_position_.push_back(angle[1]);
+    auto& position = rotate_positions[i];
+    ROS_ASSERT(position.hasMember("angle"));
+    auto& angle_val = position["angle"];
+    ROS_ASSERT(angle_val.getType() == XmlRpc::XmlRpcValue::TypeArray);
+    ROS_ASSERT(angle_val.size() >= 2);  // 确保有至少两个元素
+    auto angle0 = static_cast<double>(angle_val[0]);
+    auto angle1 = static_cast<double>(angle_val[1]);
+    rotate_place_position_.push_back(angle0);
+    rotate_back_position_.push_back(angle1);
+  }
+  for (int i = 0; i < static_cast<int>(rotate_place_position_.size()); ++i)
+  {
+    std::cout <<"place i:"<<i<< "  num:"<< rotate_place_position_[i] << std::endl;
+    std::cout << "back i:"<<i << "  num:"<< rotate_back_position_[i] << std::endl;
   }
 }
 
@@ -210,12 +224,12 @@ void Dart2Manual::init()
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
   trigger_sender_->setPoint(trigger_home_command_);
-  if (dart_fired_num_ > 3)
-    dart_fired_num_ = 0;
   rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
   if (last_launch_mode_ == PUSH)
     long_camera_x_after_push_ = long_camera_x_;
   auto_aim_state_ = NONE;
+  if (dart_fired_num_ > 3)
+    dart_fired_num_ = 0;
   last_init_time_ = ros::Time::now();
 }
 void Dart2Manual::pullDown()
@@ -273,7 +287,7 @@ void Dart2Manual::engage()
 void Dart2Manual::pullUp()
 {
   ROS_INFO("Enter PULLUP");
-  rotate_sender_ -> setPoint(rotate_back_position_[has_fired_num_]);
+  //rotate_sender_ -> setPoint(rotate_back_position_[has_fired_num_]);
   belt_right_sender_->setPoint(upward_vel_);
   belt_left_sender_->setPoint(upward_vel_);
 }
@@ -438,7 +452,8 @@ void Dart2Manual::changeGripperState(rm_common::JointPointCommandSender* gripper
 {
   if (is_release)
   {
-    gripper -> setPoint(clamp_position_);
+    if (clamp_position_.find(gripper) != clamp_position_.end())
+      gripper -> setPoint(clamp_position_.at(gripper));
     is_release = false;
   }
   else
@@ -464,7 +479,7 @@ void Dart2Manual::readyLaunchDart(int dart_fired_num)
       dart_fired_num != 0)
     launch_mode_ = ROTATE_PLACE;
   if (launch_mode_ == ROTATE_PLACE && dart_fired_num != 0 && rotate_velocity_ < 0.01 && confirm_place_ &&
-      ros::Time::now() - last_rotate_time_ > ros::Duration(0.3))
+      ros::Time::now() - last_rotate_time_ > ros::Duration(0.6))
     launch_mode_ = LOADING;
   if (launch_mode_ == LOADING  && dart_fired_num != 0 && !confirm_place_ && ros::Time::now() - last_loading_time_ > ros::Duration(0.5))
     launch_mode_ = LOADED;
@@ -491,6 +506,7 @@ bool Dart2Manual::triggerIsHome() const
 {
   return trigger_position_ <= trigger_confirm_home_;
 }
+
 void Dart2Manual::leftSwitchMidOn()
 {
   switch (manual_state_)
@@ -815,13 +831,13 @@ void Dart2Manual::setGripperAction(int dart_fired_num)
       break;
     case 2:
       clamp_mid_sender_ -> setPoint(release_position_);
-      clamp_left_sender_ -> setPoint(clamp_position_);
+      clamp_left_sender_ -> setPoint(clamp_finish_position_);
       mid_clamp_is_release_ = true;
       left_clamp_is_release_ = false;
       break;
     case 3:
       clamp_right_sender_ -> setPoint(release_position_);
-      clamp_mid_sender_ -> setPoint(clamp_position_);
+      clamp_mid_sender_ -> setPoint(clamp_finish_position_);
       right_clamp_is_release_ = true;
       mid_clamp_is_release_ = false;
       break;

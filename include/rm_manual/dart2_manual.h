@@ -134,7 +134,8 @@ protected:
   double downward_vel_, upward_vel_;
   std::unordered_map<int, Dart> dart_list_{};
   std::unordered_map<std::string, std::vector<double>> target_position_{};
-  std::unordered_map<std::string, std::vector<double>> rotate_position_{};
+//  std::unordered_map<std::string, std::vector<double>> rotate_position_{};
+  std::unordered_map<rm_common::JointPointCommandSender*, double> clamp_position_{};
   std::vector<double> rotate_place_position_{}, rotate_back_position_{};
 
   double scale_{ 0.04 }, scale_micro_{ 0.01 };
@@ -159,7 +160,7 @@ protected:
   double belt_left_position_{}, belt_right_position_{}, trigger_position_{};
   double belt_left_max_{}, belt_right_max_{}, belt_left_min_{}, belt_right_min_{}, belt_left_place_{}, belt_right_place_{},
       belt_left_placed_{}, belt_right_placed_{};
-  double clamp_position_,release_position_;
+  double clamp_left_position_, clamp_mid_position_, clamp_right_position_, release_position_, clamp_finish_position_;
   double range_velocity_ = 0., yaw_velocity_ = 0., rotate_velocity_ = 0.;
 
   double short_camera_x_set_point_, long_camera_x_set_point_, long_camera_y_set_point_;
