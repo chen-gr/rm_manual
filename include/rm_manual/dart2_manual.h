@@ -168,11 +168,10 @@ protected:
   double long_camera_p_x_, short_camera_p_x_, long_camera_p_y_;
   bool is_long_camera_found_{ false }, is_short_camera_found_{ false }, is_long_camera_aim_{};
   double long_camera_x_{}, long_camera_y_{}, short_camera_x_{}, short_camera_y_{}, last_camera_x{};
-  double long_camera_x_threshold_, retarget_threshold;
+  double long_camera_x_threshold_, retarget_threshold_;
   bool camera_central_{}, is_adjust_{};
-  double last_long_camera_x_set_point{};
   bool camera_is_online_{};
-  bool use_auto_aim_{};
+  bool use_auto_aim_{}, start_aim_{};
   double long_camera_x_before_push_{}, long_camera_x_after_push_{};
 
   InputEvent wheel_clockwise_event_, wheel_anticlockwise_event_;
@@ -183,6 +182,7 @@ protected:
   ros::Time last_ready_time_{};
   ros::Time last_init_time_{};
   ros::Time last_get_camera_data_time_{};
+  ros::Time start_aim_time_{};
   ros::Subscriber dart_client_cmd_sub_;
   ros::Subscriber long_camera_data_sub_;
   ros::Subscriber short_camera_data_sub_;

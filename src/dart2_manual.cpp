@@ -81,7 +81,8 @@ Dart2Manual::Dart2Manual(ros::NodeHandle& nh, ros::NodeHandle& nh_referee) : Man
   nh_camera.getParam("long_camera_p_y", long_camera_p_y_);
   nh_camera.getParam("short_camera_p_x", short_camera_p_x_);
   nh_camera.getParam("long_camera_x_threshold", long_camera_x_threshold_);
-  nh_camera.getParam("long_camera_detach_threshold", retarget_threshold);
+  nh_camera.getParam("retarget_threshold", retarget_threshold_);
+  nh_camera.getParam("use_auto_aim",use_auto_aim_);
 
   left_switch_up_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchUpOn, this));
   left_switch_mid_event_.setActiveHigh(boost::bind(&Dart2Manual::leftSwitchMidOn, this));
@@ -141,7 +142,7 @@ void Dart2Manual::getList(const XmlRpc::XmlRpcValue& darts, const XmlRpc::XmlRpc
     ROS_ASSERT(position.hasMember("angle"));
     auto& angle_val = position["angle"];
     ROS_ASSERT(angle_val.getType() == XmlRpc::XmlRpcValue::TypeArray);
-    ROS_ASSERT(angle_val.size() >= 2);  // 确保有至少两个元素
+    ROS_ASSERT(angle_val.size() >= 2);
     auto angle0 = static_cast<double>(angle_val[0]);
     auto angle1 = static_cast<double>(angle_val[1]);
     rotate_place_position_.push_back(angle0);
@@ -224,17 +225,20 @@ void Dart2Manual::init()
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
   trigger_sender_->setPoint(trigger_home_command_);
-  rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
   if (last_launch_mode_ == PUSH)
     long_camera_x_after_push_ = long_camera_x_;
   auto_aim_state_ = NONE;
   if (dart_fired_num_ > 3)
+  {
+    rotate_sender_ -> setPoint(rotate_back_position_[2]);
     dart_fired_num_ = 0;
+  }
   last_init_time_ = ros::Time::now();
 }
 void Dart2Manual::pullDown()
 {
   ROS_INFO("Enter PULLDOWN");
+  rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
   trigger_sender_->setPoint(trigger_work_command_);
   belt_left_sender_->setPoint(downward_vel_);
   belt_right_sender_->setPoint(downward_vel_);
@@ -244,7 +248,7 @@ void Dart2Manual::rotatePlace()
   ROS_INFO("Enter ROTATE_PLACE");
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
-  rotate_sender_ -> setPoint(rotate_place_position_[has_fired_num_]);
+  rotate_sender_ -> setPoint(rotate_place_position_[dart_fired_num_]);
   confirm_place_ = true;
   last_rotate_time_ = ros::Time::now();
 }
@@ -262,7 +266,7 @@ void Dart2Manual::rotateBack()
   ROS_INFO("Enter ROTATE_BACK");
   belt_left_sender_->setPoint(0.0);
   belt_right_sender_->setPoint(0.0);
-  rotate_sender_ -> setPoint(rotate_back_position_[has_fired_num_]);
+  rotate_sender_ -> setPoint(rotate_back_position_[dart_fired_num_]);
   confirm_back_ = true;
   last_rotate_time_ = ros::Time::now();
 }
@@ -287,7 +291,7 @@ void Dart2Manual::engage()
 void Dart2Manual::pullUp()
 {
   ROS_INFO("Enter PULLUP");
-  //rotate_sender_ -> setPoint(rotate_back_position_[has_fired_num_]);
+  rotate_sender_ -> setPoint(rotate_place_position_[dart_fired_num_]);
   belt_right_sender_->setPoint(upward_vel_);
   belt_left_sender_->setPoint(upward_vel_);
 }
@@ -313,13 +317,9 @@ void Dart2Manual::updateAutoAimState()
   switch (auto_aim_state_)
   {
     case AIM:
-      if (last_auto_aim_state_ != auto_aim_state_)
-        ROS_INFO("Enter AIM.");
       aim();
       break;
     case ADJUST:
-      if (last_auto_aim_state_ != auto_aim_state_)
-        ROS_INFO("Enter ADJUST.");
       adjust();
       break;
   }
@@ -328,10 +328,14 @@ void Dart2Manual::updateAutoAimState()
 
 void Dart2Manual::aim()
 {
-  if (is_short_camera_found_ && !is_long_camera_found_)
+  if (last_auto_aim_state_ != auto_aim_state_)
   {
-    short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
+    ROS_INFO("ENTER AIM.");
+    start_aim_ = true;
+    start_aim_time_ = ros::Time::now();
   }
+  if (is_short_camera_found_ && !is_long_camera_found_)
+    short_camera_x_set_point_ += short_camera_x_ * short_camera_p_x_;
   if (is_long_camera_found_)
   {
     long_camera_x_set_point_ += long_camera_x_ * long_camera_p_x_;
@@ -341,12 +345,15 @@ void Dart2Manual::aim()
   {
     ROS_INFO("The %d dart had aimed.Now x error:%lf, yaw position: %lf ", dart_fired_num_, long_camera_x_,
              joint_state_.position[yaw_sender_->getIndex()]);
+    start_aim_ = false;
     auto_aim_state_ = AIMED;
   }
 }
 
 void Dart2Manual::adjust()
 {
+  if (last_auto_aim_state_ != auto_aim_state_)
+    ROS_INFO("ENTER ADJUST.");
   if (dart_fired_num_ == 0)
   {
     long_camera_x_set_point_ += dart_list_[dart_fired_num_].base_offset_;
@@ -373,11 +380,19 @@ void Dart2Manual::autoAim()
   camera_is_online_ = (ros::Time::now() - last_get_camera_data_time_ < ros::Duration(1.0));
   if (use_auto_aim_ && camera_is_online_)
   {
+    if (start_aim_ && ros::Time::now() - start_aim_time_ > ros::Duration(3.0))
+    {
+      start_aim_ = false;
+      ROS_INFO("Auto aim time out!!!");
+      short_camera_x_set_point_ = 0;
+      long_camera_x_set_point_ = 0;
+      auto_aim_state_ = ADJUST;
+    }
     if (dart_fired_num_ == 0)
       auto_aim_state_ = AIM;
     if (dart_fired_num_ != 0)
     {
-      if (abs(long_camera_x_after_push_ - long_camera_x_before_push_) < retarget_threshold)
+      if (abs(long_camera_x_after_push_ - long_camera_x_before_push_) < retarget_threshold_)
         auto_aim_state_ = ADJUST;
       else
         auto_aim_state_ = AIM;
@@ -403,10 +418,10 @@ void Dart2Manual::run()
 void Dart2Manual::updateRc(const rm_msgs::DbusData::ConstPtr& dbus_data)
 {
   ManualBase::updateRc(dbus_data);
-  if (std::abs(dbus_data->ch_r_x) > 0.1){
+  if (std::abs(dbus_data->ch_r_x) > std::abs(dbus_data->ch_r_y)){
     move(yaw_sender_, dbus_data->ch_r_x);
   }
-  if (std::abs(dbus_data->ch_r_y) > 0.1){
+  if (std::abs(dbus_data->ch_r_y) > std::abs(dbus_data->ch_r_x)){
     move(range_sender_, dbus_data->ch_r_y);
   }
   operateGripper(dbus_data);
